@@ -1,0 +1,2 @@
+# include static datasets
+include spinesTS/data/built-in-datasets/*.csv
