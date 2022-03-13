@@ -37,17 +37,18 @@ class ResDenseBlock(nn.Module):
         super(ResDenseBlock, self).__init__()
         self.fc_block_1 = nn.Sequential(
             nn.Linear(in_features, out_features),
-            nn.ReLU(),
             nn.LayerNorm(out_features),
+            nn.ReLU(),
         )
         self.fc_block_2 = nn.Sequential(
             nn.Linear(in_features, out_features),
-            nn.ReLU(),
             nn.LayerNorm(out_features),
+            nn.ReLU(),
         )
         self.res_layer_1 = ResBlock()
         self.res_layer_2 = ResBlock()
         self.last_res_layer = ResBlock()
+        self.layer_norm = nn.LayerNorm(out_features)
 
     def forward(self, x, init_layer):
         # block 1
@@ -64,9 +65,9 @@ class ResDenseBlock(nn.Module):
         return x
 
 
-class MLPTorch(nn.Module):
+class RWDNet(nn.Module):
     def __init__(self, in_features, output_features, res_dense_blocks=1):
-        super(MLPTorch, self).__init__()
+        super(RWDNet, self).__init__()
         self.in_features, self.output_features = in_features, output_features
         self.input_layer_norm = nn.LayerNorm(self.in_features)
         self.encoder_hierarchical_layer = HierarchicalLayer()
@@ -141,11 +142,10 @@ class MLPTorch(nn.Module):
         x = self.encoder_layer_norm(x)
         x = self.decoder(x)
         x = self.decoder_layer_norm(x)
-
         return self.output_layer(x)
 
 
-class MLPTorchModel(TorchModelMixin):
+class RecurrentWeightedDenseNet(TorchModelMixin):
     """
     spinesTS MLP pytorch-model
 
@@ -163,7 +163,7 @@ class MLPTorchModel(TorchModelMixin):
         self.model, self.loss_fn, self.optimizer = self.call(self.in_features)
 
     def call(self, in_features):
-        model = MLPTorch(in_features, self.output_nums, self.res_dense_blocks)
+        model = RWDNet(in_features, self.output_nums, self.res_dense_blocks)
         loss_fn = nn.HuberLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer

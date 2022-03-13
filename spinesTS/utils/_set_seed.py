@@ -5,14 +5,10 @@ import random
 import torch
 
 
-def seed_everything(seed=None, tf_seed=False):
+def seed_everything(seed=0):
 
     random.seed(seed)
     np.random.seed(seed)
-    if tf_seed:
-        import tensorflow as tf
-        tf.random.set_seed(seed)
-
     os.environ['PYTHONHASHSEED'] = str(seed)
 
     torch.manual_seed(seed)

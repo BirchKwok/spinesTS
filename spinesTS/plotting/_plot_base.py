@@ -1,8 +1,3 @@
-
-
-__all__ = ['plot1d', 'plot2d']
-
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -64,3 +59,4 @@ def plot2d(*s, labels=None, fig_num_or_slice=30, figsize=None, legend=True):
             fig_index += 1
             if fig_index > num:
                 break
+    plt.show()
