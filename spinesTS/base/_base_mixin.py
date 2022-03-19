@@ -1,8 +1,14 @@
-import numpy as np
+from spinesTS.metrics import r2_score
 from spinesTS.utils import func_has_params
 
 
-class EstimatorMixin:
+class MLModelMixin:
+    def score(self, X, y, eval2d=True):
+        if eval2d:
+            return r2_score(y.T, self.predict(X).T)
+        else:
+            return r2_score(y, self.predict(X))
+
     def _fit(self, x, y, eval_set=None, **kwargs):
         if func_has_params(self._model.fit, 'eval_set') \
                 and eval_set is not None:

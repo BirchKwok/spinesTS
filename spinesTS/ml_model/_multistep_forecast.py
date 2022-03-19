@@ -1,21 +1,18 @@
-__all__ = ['MultiStepRegressor', 'MultiOutputRegressor']
-
 import numpy as np
-from sklearn.base import RegressorMixin
 from joblib import Parallel, delayed
 import copy
 
 from sklearn.multioutput import _MultiOutputEstimator, _fit_estimator
 from sklearn.utils.validation import has_fit_parameter, _check_fit_params
 
-from spinesTS.base._base_mixin import EstimatorMixin
+from spinesTS.base import MLModelMixin
 from spinesTS.utils import func_has_params
 import warnings
 
 warnings.filterwarnings('ignore')
 
 
-class MultiStepRegressor(RegressorMixin, EstimatorMixin):
+class MultiStepRegressor(MLModelMixin):
     """
     use the last predict-step value as the last step true value,
     to predict current step value,
@@ -55,7 +52,7 @@ class MultiStepRegressor(RegressorMixin, EstimatorMixin):
         return np.squeeze(np.transpose(r))
 
 
-class MultiOutputRegressor(RegressorMixin, _MultiOutputEstimator):
+class MultiOutputRegressor(MLModelMixin, _MultiOutputEstimator):
     """fitting one regressor per target."""
 
     def __init__(self, estimator, *, n_jobs=None):
