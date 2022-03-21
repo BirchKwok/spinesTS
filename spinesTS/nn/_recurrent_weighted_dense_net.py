@@ -53,7 +53,6 @@ class ResDenseBlock(nn.Module):
     def forward(self, x, init_layer):
         # block 1
         x = self.fc_block_1(x)
-        x = torch.squeeze(x)
         x = self.res_layer_1([init_layer, x])
 
         up_level_layer = x.clone()
@@ -91,8 +90,11 @@ class RWDNet(nn.Module):
         self.decoder_module_list_2 = nn.ModuleList([ResDenseBlock(self.in_features, out_features=self.in_features)
                                                     for i in range(res_dense_blocks)])
 
-        self.encoder_layer_norm = nn.LayerNorm(self.in_features*2)
-        self.decoder_layer_norm = nn.LayerNorm(self.in_features*2)
+        self.encoder_layer_norm_1 = nn.LayerNorm(self.in_features)
+        self.encoder_layer_norm_2 = nn.LayerNorm(self.in_features)
+
+        self.decoder_layer_norm_1 = nn.LayerNorm(self.in_features)
+        self.decoder_layer_norm_2 = nn.LayerNorm(self.in_features)
 
         self.output_layer = nn.Linear(self.in_features * 2, self.output_features)
 
@@ -114,10 +116,9 @@ class RWDNet(nn.Module):
         x_2 = self.encoder_hierarchical_lstm_layers[1](x_2)[0]
         x_2 = torch.squeeze(x_2)
 
-        return torch.concat((x_1, x_2), dim=1)  # in_features * 2
+        return x_1, x_2  # in_features * 2
 
-    def decoder(self, x):
-        x_1, x_2 = x[:, :x.shape[1] // 2], x[:, x.shape[1] // 2:]
+    def decoder(self, x_1, x_2):
         first_layer_1, first_layer_2 = x_1.clone(), x_2.clone()
 
         for layer in self.decoder_module_list_1:
@@ -134,14 +135,17 @@ class RWDNet(nn.Module):
         x_2 = self.decoder_hierarchical_lstm_layers[1](x_2)[0]
         x_2 = torch.squeeze(x_2)
 
-        return torch.concat((x_1, x_2), dim=1)
+        return x_1, x_2
 
     def forward(self, x):
         first_layer = self.input_layer_norm(x)
-        x = self.encoder(first_layer)
-        x = self.encoder_layer_norm(x)
-        x = self.decoder(x)
-        x = self.decoder_layer_norm(x)
+        x_1, x_2 = self.encoder(first_layer)
+        x_1 = self.encoder_layer_norm_1(x_1)
+        x_2 = self.encoder_layer_norm_2(x_2)
+        x_1, x_2 = self.decoder(x_1, x_2)
+        x_1 = self.decoder_layer_norm_1(x_1)
+        x_2 = self.decoder_layer_norm_2(x_2)
+        x = torch.concat((x_1, x_2), dim=-1)
         return self.output_layer(x)
 
 
@@ -153,6 +157,7 @@ class RecurrentWeightedDenseNet(TorchModelMixin):
 
     def __init__(self, in_features, output_nums, learning_rate=0.001, res_dense_blocks=1,
                  random_seed=0):
+        assert in_features > 1, "in_features must be greater than 1."
         seed_everything(random_seed)
         self.output_nums, self.in_features = output_nums, in_features
         self.learning_rate = learning_rate
@@ -169,17 +174,18 @@ class RecurrentWeightedDenseNet(TorchModelMixin):
         return model, loss_fn, optimizer
 
     def fit(self, X_train, y_train, epochs=1000, batch_size='auto', eval_set=None,
-            monitor='val_loss', min_delta=0, patience=10,
+            monitor='val_loss', min_delta=0, patience=10, use_lr_scheduler=False,
+            lr_scheduler_patience=10, lr_factor=0.7,
             restore_best_weights=True, verbose=True):
         X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
 
         return self._fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
-                         monitor=monitor,
+                         monitor=monitor, use_lr_scheduler=use_lr_scheduler,
+                         lr_scheduler_patience=lr_scheduler_patience,
+                         lr_factor=lr_factor,
                          min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
                          verbose=verbose)
 
     def predict(self, x):
         assert self.model is not None, "model not fitted yet."
         return self._predict(x)
-
-
