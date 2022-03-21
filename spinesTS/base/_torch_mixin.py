@@ -36,6 +36,7 @@ class TorchModelMixin:
 
         train_batch = 0
         train_loss_current, train_acc = 0, 0
+
         for i in range(train_num_batches):
             x_train = X[train_batch * batch_size: (train_batch + 1) * batch_size]
             y_train = y[train_batch * batch_size: (train_batch + 1) * batch_size]
@@ -49,10 +50,13 @@ class TorchModelMixin:
             optimizer.zero_grad()  # 先将优化器中的累计梯度置空
             train_loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.)
+
             optimizer.step()  # 对当前步骤执行优化
 
             train_acc += self.metric(y_train.detach().cpu().numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
             train_loss_current = train_loss.item()
+
+
 
             train_batch += 1
 
@@ -108,7 +112,8 @@ class TorchModelMixin:
 
     def _fit(self, X, y, epochs=1000, batch_size='auto', eval_set=None,
              loss_type='down', metrics_name='score', monitor='val_loss', min_delta=0, patience=10,
-             restore_best_weights=True, verbose=True):
+             use_lr_scheduler=True,
+             lr_scheduler_patience=10, lr_factor=0.7, restore_best_weights=True, verbose=True):
 
         assert eval_set is None or isinstance(eval_set, (list, tuple))
         assert monitor in ('loss', 'val_loss', None)
@@ -128,6 +133,12 @@ class TorchModelMixin:
         self.current_loss = np.finfo(np.float64).max - min_delta
         self.best_weight = copy.deepcopy(self.model.state_dict())
         batches = int(np.ceil(len(X) / self._batch_size))
+
+        if use_lr_scheduler:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
+                                                                   mode='min' if loss_type == 'down' else 'max',
+                                                                   patience=lr_scheduler_patience, factor=lr_factor)
+
         for epoch in range(epochs):
             tik = time.time()
             stop_state = False
@@ -137,6 +148,13 @@ class TorchModelMixin:
 
             train_loss_current, train_acc = self.train(X, y, model=self.model, loss_fn=self.loss_fn,
                                                        optimizer=self.optimizer, batch_size=self._batch_size)
+
+            if use_lr_scheduler:
+                last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
+                scheduler.step(train_loss_current, epoch)
+                if last_lr != self.optimizer.state_dict()['param_groups'][0]['lr']:
+                    last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
+                    metric_string += f"\n Changed learning rate to {last_lr} -\n"
 
             metric_string += f" loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f} -"
 
