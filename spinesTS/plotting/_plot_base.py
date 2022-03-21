@@ -47,6 +47,7 @@ def plot2d(*S, x=None, labels=None, eval_slices='[:30]',
                 ax.plot(x, _to_plot_array[j][i-1], label=label, ls='-')
             else:
                 ax.plot(_to_plot_array[j][i-1], label=label, ls='-')
+            ax.grid(True, which='major', c='gray', ls='-', lw=1, alpha=0.2)
             if legend:
                 ax.legend()
 
