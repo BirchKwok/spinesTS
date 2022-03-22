@@ -21,6 +21,7 @@ from . import (
     base,
     data,
     feature_extract,
+    layers,
     ml_model,
     nn,
     pipeline,
