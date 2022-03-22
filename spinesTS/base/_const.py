@@ -8,7 +8,8 @@ class DataTS:
         assert isinstance(dataset, pd.DataFrame) or isinstance(dataset, np.ndarray)
         if isinstance(dataset, pd.DataFrame) is False:
             self._dataset = pd.DataFrame(dataset)
-        self._dataset = dataset
+        else:
+            self._dataset = dataset
 
     @property
     def data(self):
