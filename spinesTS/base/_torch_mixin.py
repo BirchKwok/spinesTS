@@ -14,6 +14,7 @@ class TorchModelMixin:
     """
     pytorch model common mixin class
     """
+
     def move_to_device(self, obj, d=device):
         obj = obj.to(d)
         return obj
@@ -28,7 +29,15 @@ class TorchModelMixin:
             assert isinstance(batch_size, int) and batch_size > 0
             self._batch_size = batch_size
 
-    def train(self, X, y, model, loss_fn, optimizer, batch_size):
+    def train(
+            self,
+            X,
+            y,
+            model,
+            loss_fn,
+            optimizer,
+            batch_size
+    ):
         train_size = len(X)
         train_num_batches = int(np.ceil(train_size / batch_size))
 
@@ -56,13 +65,18 @@ class TorchModelMixin:
             train_acc += self.metric(y_train.detach().cpu().numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
             train_loss_current = train_loss.item()
 
-
-
             train_batch += 1
 
         return train_loss_current, train_acc / train_batch
 
-    def test(self, X, y, model, loss_fn, batch_size):
+    def test(
+            self,
+            X,
+            y,
+            model,
+            loss_fn,
+            batch_size
+    ):
         X_t, y_t = torch.Tensor(X), torch.Tensor(y)
         test_size = len(X_t)
         model.eval()  # 将模型设置为预测模式
@@ -85,8 +99,14 @@ class TorchModelMixin:
 
         return test_loss, test_acc
 
-    def _early_stopping(self, loss, loss_type='down', min_delta=0, patience=10,
-                        restore_best_weights=True):
+    def _early_stopping(
+            self,
+            loss,
+            loss_type='down',
+            min_delta=0,
+            patience=10,
+            restore_best_weights=True
+    ):
         """
         loss type : rise or down
         """
@@ -110,10 +130,24 @@ class TorchModelMixin:
 
         return False
 
-    def _fit(self, X, y, epochs=1000, batch_size='auto', eval_set=None,
-             loss_type='down', metrics_name='score', monitor='val_loss', min_delta=0, patience=10,
-             use_lr_scheduler=True,
-             lr_scheduler_patience=10, lr_factor=0.7, restore_best_weights=True, verbose=True):
+    def _fit(
+            self,
+            X,
+            y,
+            epochs=1000,
+            batch_size='auto',
+            eval_set=None,
+            loss_type='down',
+            metrics_name='score',
+            monitor='val_loss',
+            min_delta=0,
+            patience=10,
+            use_lr_scheduler=True,
+            lr_scheduler_patience=10,
+            lr_factor=0.7,
+            restore_best_weights=True,
+            verbose=True
+    ):
 
         assert eval_set is None or isinstance(eval_set, (list, tuple))
         assert monitor in ('loss', 'val_loss', None)
@@ -206,4 +240,4 @@ class TorchModelMixin:
     def summary(self):
         assert self.model is not None, "model must be not None."
         if self.model is not None:
-            torch_summary(self.model, input_shape=(self.in_features, ))
+            torch_summary(self.model, input_shape=(self.in_features,))

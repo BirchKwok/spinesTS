@@ -4,32 +4,7 @@ from torch import nn
 
 from spinesTS.utils import seed_everything
 from spinesTS.base import TorchModelMixin
-
-
-class ResBlock(nn.Module):
-    def __init__(self):
-        super(ResBlock, self).__init__()
-        self.coefficient = nn.Parameter(torch.Tensor([1.]))
-
-    def forward(self, inputs):
-        return inputs[0] + inputs[1] * self.coefficient
-
-
-class HierarchicalLayer(nn.Module):
-    def __init__(self):
-        super(HierarchicalLayer, self).__init__()
-
-    @staticmethod
-    def even(x):
-        return x[:, ::2]
-
-    @staticmethod
-    def odd(x):
-        return x[:, 1::2]
-
-    def forward(self, x):
-        """Returns the odd and even part"""
-        return self.even(x), self.odd(x)
+from spinesTS.layers import ResBlock, Hierarchical1d
 
 
 class ResDenseBlock(nn.Module):
@@ -69,7 +44,7 @@ class RWDNet(nn.Module):
         super(RWDNet, self).__init__()
         self.in_features, self.output_features = in_features, output_features
         self.input_layer_norm = nn.LayerNorm(self.in_features)
-        self.encoder_hierarchical_layer = HierarchicalLayer()
+        self.encoder_hierarchical_layer = Hierarchical1d()
 
         linear_input_shape = int(np.ceil(self.in_features / 2))
         self.encoder_hierarchical_lstm_layers = nn.ModuleList([
@@ -155,8 +130,14 @@ class RecurrentWeightedDenseNet(TorchModelMixin):
 
     """
 
-    def __init__(self, in_features, output_nums, learning_rate=0.001, res_dense_blocks=1,
-                 random_seed=0):
+    def __init__(
+            self,
+            in_features,
+            output_nums,
+            learning_rate=0.001,
+            res_dense_blocks=1,
+            random_seed=0
+    ):
         assert in_features > 1, "in_features must be greater than 1."
         seed_everything(random_seed)
         self.output_nums, self.in_features = output_nums, in_features
@@ -173,10 +154,22 @@ class RecurrentWeightedDenseNet(TorchModelMixin):
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer
 
-    def fit(self, X_train, y_train, epochs=1000, batch_size='auto', eval_set=None,
-            monitor='val_loss', min_delta=0, patience=10, use_lr_scheduler=False,
-            lr_scheduler_patience=10, lr_factor=0.7,
-            restore_best_weights=True, verbose=True):
+    def fit(
+            self,
+            X_train,
+            y_train,
+            epochs=1000,
+            batch_size='auto',
+            eval_set=None,
+            monitor='val_loss',
+            min_delta=0,
+            patience=10,
+            use_lr_scheduler=False,
+            lr_scheduler_patience=10,
+            lr_factor=0.7,
+            restore_best_weights=True,
+            verbose=True
+    ):
         X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
 
         return self._fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
@@ -189,3 +182,4 @@ class RecurrentWeightedDenseNet(TorchModelMixin):
     def predict(self, x):
         assert self.model is not None, "model not fitted yet."
         return self._predict(x)
+

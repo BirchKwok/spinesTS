@@ -3,6 +3,13 @@ from torch import nn
 
 
 class Hierarchical1d(nn.Module):
+    """
+    Splits the incoming sequence into two sequences by parity index.
+
+    Returns
+    -------
+    torch.Tensor
+    """
     def __init__(self):
         super(Hierarchical1d, self).__init__()
 
@@ -19,9 +26,24 @@ class Hierarchical1d(nn.Module):
         return self.even(x), self.odd(x)
 
 
-class MovingAverage1d(nn.Module):
+class TrainableMovingAverage1d(nn.Module):
+    """Take the moving average of the incoming sequence,
+    accept a 2-dimensional tensor x,
+    and return a 2-dimensional tensor of the shape:
+    (x.shape[0], x.shape[1] // kernel_size + x.shape[1] % kernel_size)
+
+    Parameters
+    ----------
+    kernel_size: int, moving average window size
+    weighted: bool, if true, it is a weighted moving average and the weight is a trainable parameter;
+    otherwise, it is a simple moving average
+
+    Returns
+    -------
+    torch.Tensor
+    """
     def __init__(self, kernel_size, weighted=True):
-        super(MovingAverage1d, self).__init__()
+        super(TrainableMovingAverage1d, self).__init__()
         self.kernel_size = kernel_size
         if weighted:
             self.weighted = nn.Parameter(torch.randn(self.kernel_size))
@@ -46,8 +68,23 @@ class MovingAverage1d(nn.Module):
 
 
 class SeasonalLayer(nn.Module):
-    def __init__(self):
+    """
+
+    Parameters
+    ----------
+    s: int,
+    trainable: bool,
+
+
+    Returns
+    -------
+    torch.Tensor
+
+    """
+    def __init__(self, s, trainable=True):
         super(SeasonalLayer, self).__init__()
+        self.s = s
+        self.trainable = trainable
 
     def forward(self, x):
         pass
