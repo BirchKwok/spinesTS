@@ -3,8 +3,8 @@ import torch
 from torch import nn
 
 from spinesTS.utils import seed_everything
-from spinesTS.base import TorchModelMixin
-from spinesTS.layers import ResBlock, Hierarchical1d
+from spinesTS.base import TorchModelMixin, device
+from spinesTS.layers import ResBlock, Hierarchical1d, TrainableDropout
 
 
 class ResDenseBlock(nn.Module):
@@ -13,11 +13,13 @@ class ResDenseBlock(nn.Module):
         self.fc_block_1 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.LayerNorm(out_features),
+            TrainableDropout(p=0.3, device=device),
             nn.ReLU(),
         )
         self.fc_block_2 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.LayerNorm(out_features),
+            TrainableDropout(p=0.3, device=device),
             nn.ReLU(),
         )
         self.res_layer_1 = ResBlock()
@@ -134,7 +136,7 @@ class RecurrentWeightedDenseNet(TorchModelMixin):
             self,
             in_features,
             output_nums,
-            learning_rate=0.001,
+            learning_rate=0.0001,
             res_dense_blocks=1,
             random_seed=0
     ):
@@ -182,4 +184,3 @@ class RecurrentWeightedDenseNet(TorchModelMixin):
     def predict(self, x):
         assert self.model is not None, "model not fitted yet."
         return self._predict(x)
-
