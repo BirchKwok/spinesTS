@@ -42,9 +42,10 @@ class TrainableMovingAverage1d(nn.Module):
     -------
     torch.Tensor
     """
-    def __init__(self, kernel_size, weighted=True):
+    def __init__(self, kernel_size, weighted=True, device=None):
         super(TrainableMovingAverage1d, self).__init__()
         self.kernel_size = kernel_size
+        self.device = device
         if weighted:
             self.weighted = nn.Parameter(torch.randn(self.kernel_size))
         else:
@@ -53,13 +54,13 @@ class TrainableMovingAverage1d(nn.Module):
     def forward(self, x):
         assert x.ndim == 2, "MovingAverageLayer accept a two dims input."
         rows, cols = x.shape
-        res = torch.empty((rows, cols // self.kernel_size + cols % self.kernel_size))
+        res = torch.empty((rows, cols // self.kernel_size + cols % self.kernel_size), device=self.device)
         for i in range(rows):
             for j in range(cols // self.kernel_size + cols % self.kernel_size):
                 if j * self.kernel_size < cols:
                     _ = x[i, j * self.kernel_size: (j+1) * self.kernel_size]
                     if len(_) < self.kernel_size:
-                        _ = torch.concat((_, torch.zeros(self.kernel_size - len(_))))
+                        _ = torch.concat((_, torch.zeros(self.kernel_size - len(_), device=self.device)))
                     if self.weighted:
                         res[i, j] = torch.sum(torch.mul(_, self.weighted))
                     else:

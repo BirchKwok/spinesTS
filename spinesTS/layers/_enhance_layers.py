@@ -9,11 +9,13 @@ class GaussianNoise1d(nn.Module):
     -------
     torch.Tensor
     """
-    def __init__(self):
+
+    def __init__(self, device=None):
         super(GaussianNoise1d, self).__init__()
+        self.device = device
 
     def forward(self, x):
-        return x + torch.mul(torch.randn_like(x) , 1 / torch.median(x) / 60)
+        return x + torch.mul(torch.randn_like(x, device=self.device), 1 / torch.median(x) / 60)
 
 
 class TrainableDropout(nn.Module):
@@ -28,9 +30,12 @@ class TrainableDropout(nn.Module):
     -------
     torch.Tensor
     """
-    def __init__(self, p, trainable=True):
+
+    def __init__(self, p, trainable=True, device=None):
         assert 0 <= p <= 1, "p must be greater than or equal to 0 and less than or equal to 1."
         super(TrainableDropout, self).__init__()
+        self.device = device
+        p = torch.Tensor([p])
         if trainable:
             self.p = nn.Parameter(p)
         else:
@@ -40,9 +45,9 @@ class TrainableDropout(nn.Module):
         assert 0 <= self.p <= 1
         # In this case, all elements are discarded
         if self.p == 1:
-            return torch.zeros_like(x)
+            return torch.zeros_like(x, device=self.device)
         # In this case, all elements are retained
         if self.p == 0:
             return x
-        mask = (torch.rand(x.shape) > self.p).float()
+        mask = (torch.rand(x.shape, device=self.device) > self.p).float()
         return mask * x / (1.0 - self.p)
