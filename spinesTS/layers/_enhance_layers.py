@@ -4,7 +4,7 @@ from torch import nn
 
 class GaussianNoise1d(nn.Module):
     """Adds Gaussian noise to the input tensor.
-
+    
     Returns
     -------
     torch.Tensor
@@ -13,7 +13,7 @@ class GaussianNoise1d(nn.Module):
         super(GaussianNoise1d, self).__init__()
 
     def forward(self, x):
-        return x + torch.randn_like(x)
+        return x + torch.mul(torch.randn_like(x) , 1 / torch.median(x) / 60)
 
 
 class TrainableDropout(nn.Module):
@@ -38,10 +38,10 @@ class TrainableDropout(nn.Module):
 
     def forward(self, x):
         assert 0 <= self.p <= 1
-        # 在本情况中，所有元素都被丢弃
+        # In this case, all elements are discarded
         if self.p == 1:
             return torch.zeros_like(x)
-        # 在本情况中，所有元素都被保留
+        # In this case, all elements are retained
         if self.p == 0:
             return x
         mask = (torch.rand(x.shape) > self.p).float()
