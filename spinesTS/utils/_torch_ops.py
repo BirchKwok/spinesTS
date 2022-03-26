@@ -8,7 +8,8 @@ def one_dim_tensor_del_elements(tensor, start_index, end_index=None):
     ----------
     tensor: torch.Tensor, with one dim
     start_index: int, index of the value to be dropped
-    end_index: int, index of the value to be dropped, if not None, the tensor will be dropped from the start_index to the end_index
+    end_index: int, index of the value to be dropped, if not None,
+    the tensor will be dropped from the start_index to the end_index
     
     Returns
     -------

@@ -27,16 +27,15 @@ class Hierarchical1d(nn.Module):
 
 
 class TrainableMovingAverage1d(nn.Module):
-    """Take the moving average of the incoming sequence,
-    accept a 2-dimensional tensor x,
-    and return a 2-dimensional tensor of the shape:
-    (x.shape[0], x.shape[1] // kernel_size + x.shape[1] % kernel_size)
+    """Take the moving average of the input sequence.
+        accept a 2-dimensional tensor x, and return a 2-dimensional tensor of the shape:
+        (x.shape[0], x.shape[1] // kernel_size + x.shape[1] % kernel_size)
 
     Parameters
     ----------
     kernel_size: int, moving average window size
     weighted: bool, if true, it is a weighted moving average and the weight is a trainable parameter;
-    otherwise, it is a simple moving average
+        otherwise, it is a simple moving average
 
     Returns
     -------

@@ -7,15 +7,53 @@ from torch import nn
 from spinesTS.metrics import mean_absolute_error
 from spinesTS.utils import torch_summary
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 class TorchModelMixin:
-    """
-    pytorch model common mixin class
+    """Provide pytorch models common mixin class
+
+    this class make it easy to write code like this:
+        ```python
+        class Model(TorchModelMixin):
+            def __init__(self, *args, **kwargs):
+                # do something
+                self.call()  # implement your model architecture
+
+            def call(self):
+                model = your_model_class()
+                loss_fn = your_loss_function()
+                optimizer = your_optimizer_function()
+                return model, loss_fn, optimizer
+
+            def metric(self, y_true, y_pred):
+                # implement your metric function
+
+            def fit(self, *args, **kwargs):
+                return self._fit(*args, **kwargs)
+
+            def predict(self, *args, **kwargs):
+                return self._predict(*args, **kwargs)
+
+        # To fit something
+        model = Model(args, kwargs)
+        model.fit(X, y)
+
+        # To predict something
+        y_pred = model.predict(X)
+        ```
     """
 
-    def move_to_device(self, obj, d=device):
+    def call(self, *args, **kwargs):
+        raise NotImplementedError("To implement a spinesTS.nn model class, you must be implement a call function.")
+
+    def fit(self, *args, **kwargs):
+        raise NotImplementedError("To implement a spinesTS.nn model class, you must be implement a fit function.")
+
+    def predict(self, *args, **kwargs):
+        raise NotImplementedError("To implement a spinesTS.nn model class, you must be implement a predict function.")
+
+    def move_to_device(self, obj, d=DEVICE):
         obj = obj.to(d)
         return obj
 
@@ -49,7 +87,7 @@ class TorchModelMixin:
         for i in range(train_num_batches):
             x_train = X[train_batch * batch_size: (train_batch + 1) * batch_size]
             y_train = y[train_batch * batch_size: (train_batch + 1) * batch_size]
-            x_train, y_train = x_train.to(device), y_train.to(device)
+            x_train, y_train = x_train.to(DEVICE), y_train.to(DEVICE)
 
             # 计算预测误差
             train_pred = model(x_train)
@@ -87,7 +125,7 @@ class TorchModelMixin:
             for i in range(test_num_batches):
                 x_test = X_t[test_batch * batch_size: (test_batch + 1) * batch_size]
                 y_test = y_t[test_batch * batch_size: (test_batch + 1) * batch_size]
-                x_test, y_test = x_test.to(device), y_test.to(device)
+                x_test, y_test = x_test.to(DEVICE), y_test.to(DEVICE)
                 pred = model(x_test)
                 test_loss += loss_fn(pred, y_test).item()  # 返回一个标量，表示在测试集上的损失
                 # 返回一个标量，表示在测试集上的准确与否

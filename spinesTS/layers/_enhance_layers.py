@@ -45,7 +45,7 @@ class TrainableDropout(nn.Module):
         if trainable:
             self.p = nn.Parameter(p)
         else:
-            self.p = p
+            self.p = p.to(self.device)
 
     def forward(self, x):
         assert 0 <= self.p <= 1

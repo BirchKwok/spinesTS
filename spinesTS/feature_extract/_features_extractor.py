@@ -5,16 +5,16 @@ from sklearn.linear_model import LinearRegression
 
 
 class FeatureExtractor:
-    """
-        Extract features for continuous sequences of inputs
-        e.g.:
-        x = [[1, 2, 3, 4, 5, 6],
-             [10, 13, 15, 20, 33, 40]]
+    """Extract features for two dims series.
+
+    Returns
+    -------
+    None
     """
 
     def __init__(self):
         """
-        Extract features for continuous sequences of inputs
+        Extract features for continuous sequences of inputs.
         """
         self._window_size = 0.15
         self._diff_order = 1
@@ -23,10 +23,15 @@ class FeatureExtractor:
 
     @staticmethod
     def get_usual_statistical(x):
-        """
-        Get descriptive statistics
-        :param x: array-like
-        :return: array-like
+        """Get descriptive statistics.
+
+        Parameters
+        ----------
+        x: array-like
+
+        Returns
+        -------
+        numpy.ndarray
         """
         _mean = np.mean(x, axis=-1).reshape(-1, 1)
         _kurt = stats.kurtosis(x, axis=-1, nan_policy='omit').reshape(-1, 1)
@@ -40,10 +45,15 @@ class FeatureExtractor:
 
     @staticmethod
     def get_linearity(x):
-        """
-        Get the linear fitting feature
-        :param x: array-like
-        :return: array-like
+        """Get the linear fitting feature.
+
+        Parameters
+        ----------
+        x: array-like
+
+        Returns
+        -------
+        numpy.ndarray
         """
 
         def fit_each_x(_, name='coef'):
@@ -63,10 +73,15 @@ class FeatureExtractor:
 
     @staticmethod
     def get_entropy(x):
-        """
-        Get the cross entropy features
-        :param x: array-like
-        :return: array-like
+        """Get the cross entropy features.
+
+        Parameters
+        ----------
+        x: array-like
+
+        Returns
+        -------
+        numpy.ndarray
         """
         _ = Parallel(n_jobs=-1)(delayed(stats.entropy)(_) for _ in x)
         _ = np.array(_).reshape(-1, 1)
@@ -74,10 +89,16 @@ class FeatureExtractor:
 
     @staticmethod
     def get_difference(x, order=1):
-        """
-        Get the specified order difference
-        :param x: array-like
-        :param order: int or list or tuple, the order of difference
+        """Get the specified order difference.
+
+        Parameters
+        ----------
+        x: array-like
+        order: int or list or tuple, the order of difference.
+
+        Returns
+        -------
+        numpy.ndarray
         """
         if isinstance(order, int):
             return np.diff(x, n=order)
@@ -85,12 +106,18 @@ class FeatureExtractor:
             return np.concatenate([np.diff(x, n=i) for i in order], axis=1)
 
     def get_outlier_statistical(self, x, window_size=0.15, top_k=None):
-        """
-        Get descriptive statistical characteristics around outliers
-        :param x: array-like
-        :param window_size: int or float, The length of the interval around the outlier.
-        If float-type, represents the ratio of the range of each move to the length of each data sample;
-        if integer-type, represents the step size of each move.
+        """Get descriptive statistical characteristics around outliers.
+
+        Parameters
+        ----------
+        x: array-like
+        window_size: int or float. The length of the interval around the outlier,
+            if float-type, represents the ratio of the range of each move to the length of each data sample;
+            if integer-type, represents the step size of each move.
+
+        Returns
+        -------
+        numpy.ndarray
         """
         assert isinstance(window_size, (int, float)), "window_size must be float or int"
         if isinstance(window_size, float):
@@ -130,13 +157,19 @@ class FeatureExtractor:
         return np.concatenate(_2, axis=-1)
 
     def fit(self, x, window_size=0.15, diff_order=1, drop_init_features=False, top_k_outlier=None):
-        """
-        Fit the inputting matrix
-        :param x: array-like
-        :param window_size: int or float, The length of the interval around the outlier.
-        If float-type, represents the ratio of the range of each move to the length of each data sample;
-        if integer-type, represents the step size of each move
-        :param diff_order: int or list or tuple, the order of difference
+        """Fit the inputting matrix.
+
+        Parameters
+        ----------
+        x: array-like
+        window_size: int or float. The length of the interval around the outlier,
+            if float-type, represents the ratio of the range of each move to the length of each data sample;
+            if integer-type, represents the step size of each move.
+        diff_order: int or list or tuple, the order of difference.
+
+        Returns
+        -------
+        self
         """
 
         assert isinstance(x, np.ndarray) and x.ndim == 2
@@ -148,20 +181,33 @@ class FeatureExtractor:
 
     def fit_transform(self, x, window_size=0.15, diff_order=1, drop_init_features=False, top_k_outlier=None):
         """
-        Fit and extract the features of the inputting matrix
-        :param x: array-like
-        :param window_size: int or float, The length of the interval around the outlier.
-        If float-type, represents the ratio of the range of each move to the length of each data sample;
-        if integer-type, represents the step size of each move
-        :param diff_order: int, the order of difference
+        Fit and extract the features of the inputting matrix.
+
+        Parameters
+        ----------
+        x: array-like
+        window_size: int or float. The length of the interval around the outlier,
+            if float-type, represents the ratio of the range of each move to the length of each data sample;
+            if integer-type, represents the step size of each move.
+        diff_order: int or list or tuple, the order of difference.
+
+        Returns
+        -------
+        numpy.ndarray
         """
         self.fit(x, window_size, diff_order, drop_init_features, top_k_outlier)
         return self.transform(x)
 
     def transform(self, X):
-        """
-        Extract the features of the inputting matrix
-        :param x: array-like
+        """Extract the features of the inputting matrix.
+
+        Parameters
+        ----------
+        x: array-like
+
+        Returns
+        -------
+        numpy.ndarray
         """
         x = copy.deepcopy(X)
         if self._drop_init_features:

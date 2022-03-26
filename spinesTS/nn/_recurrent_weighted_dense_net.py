@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from spinesTS.utils import seed_everything
-from spinesTS.base import TorchModelMixin, device
+from spinesTS.base import TorchModelMixin, DEVICE
 from spinesTS.layers import ResBlock, Hierarchical1d, TrainableDropout
 
 
@@ -13,19 +13,18 @@ class ResDenseBlock(nn.Module):
         self.fc_block_1 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.LayerNorm(out_features),
-            TrainableDropout(p=0.3, device=device),
+            TrainableDropout(p=0.3, device=DEVICE, trainable=True),
             nn.ReLU(),
         )
         self.fc_block_2 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.LayerNorm(out_features),
-            TrainableDropout(p=0.3, device=device),
+            TrainableDropout(p=0.3, device=DEVICE, trainable=True),
             nn.ReLU(),
         )
         self.res_layer_1 = ResBlock()
         self.res_layer_2 = ResBlock()
         self.last_res_layer = ResBlock()
-        self.layer_norm = nn.LayerNorm(out_features)
 
     def forward(self, x, init_layer):
         # block 1
@@ -93,7 +92,7 @@ class RWDNet(nn.Module):
         x_2 = self.encoder_hierarchical_lstm_layers[1](x_2)[0]
         x_2 = torch.squeeze(x_2)
 
-        return x_1, x_2  # in_features * 2
+        return x_1, x_2
 
     def decoder(self, x_1, x_2):
         first_layer_1, first_layer_2 = x_1.clone(), x_2.clone()
