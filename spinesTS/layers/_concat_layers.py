@@ -9,7 +9,7 @@ class ResBlock(nn.Module):
 
     Parameters
     ----------
-    trainable: bool, If true, the element with index 1 is multiplied by a trainable scalar,
+    trainable : bool, If true, the element with index 1 is multiplied by a trainable scalar,
         followed by a residual join.This can be thought of as taking into account
         the join ratio of elements with index 1.
 

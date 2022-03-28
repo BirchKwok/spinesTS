@@ -11,8 +11,8 @@ def _get_it_name(built_in_func, name):
 
     Parameters
     ----------
-    built_in_func: BuiltInSeriesData class
-    name: dataset's name
+    built_in_func : BuiltInSeriesData class
+    name : dataset's name
 
     Returns
     -------
@@ -31,9 +31,9 @@ class DataReader:
 
     Parameters
     ----------
-    fp: file path
-    sep: str, file separator
-    **pd_read_csv_kwargs: pandas.read_csv function params
+    fp : file path
+    sep : str, file separator
+    **pd_read_csv_kwargs : pandas.read_csv function params
 
     Returns
     -------
@@ -68,7 +68,7 @@ class BuiltInSeriesData:
 
     Parameters
     ----------
-    print_file_list: bool, whether to print the exists file name list
+    print_file_list : bool, whether to print the exists file name list
 
     Returns
     -------

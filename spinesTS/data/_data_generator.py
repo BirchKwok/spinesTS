@@ -19,9 +19,9 @@ class DataGenerator:
 
         Parameters
         ----------
-        size: int, data points number to generate
-        sin_cos_noise_fact: Tuple of float, the weights of sine, cosine and standard gaussian distributed noise
-        random_state: None or int, random seed
+        size : int, data points number to generate
+        sin_cos_noise_fact : Tuple of float, the weights of sine, cosine and standard gaussian distributed noise
+        random_state : None or int, random seed
 
         Returns
         -------
@@ -49,10 +49,10 @@ class DataGenerator:
 
         Parameters
         ----------
-        size: int, data points number to generate
-        mean: float, the mean of gaussian distribution noise, default to 0.
-        std: float, the standard deviation (std) of gaussian distribution noise, default to 1.
-        random_state: None or int, random seed
+        size : int, data points number to generate
+        mean : float, the mean of gaussian distribution noise, default to 0.
+        std : float, the standard deviation (std) of gaussian distribution noise, default to 1.
+        random_state : None or int, random seed
 
         Returns
         -------
@@ -77,9 +77,9 @@ class DataGenerator:
 
         Parameters
         ----------
-        size: int, data points number to generate
-        started_zero: bool, whether to start from zero
-        random_state: None or int, random seed
+        size : int, data points number to generate
+        started_zero : bool, whether to start from zero
+        random_state : None or int, random seed
 
         Returns
         -------

@@ -27,7 +27,7 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
+        x : array-like
 
         Returns
         -------
@@ -49,7 +49,7 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
+        x : array-like
 
         Returns
         -------
@@ -77,7 +77,7 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
+        x : array-like
 
         Returns
         -------
@@ -93,8 +93,8 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
-        order: int or list or tuple, the order of difference.
+        x : array-like
+        order : int or list or tuple, the order of difference.
 
         Returns
         -------
@@ -110,8 +110,8 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
-        window_size: int or float. The length of the interval around the outlier,
+        x : array-like
+        window_size : int or float. The length of the interval around the outlier,
             if float-type, represents the ratio of the range of each move to the length of each data sample;
             if integer-type, represents the step size of each move.
 
@@ -161,11 +161,11 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
-        window_size: int or float. The length of the interval around the outlier,
+        x : array-like
+        window_size : int or float. The length of the interval around the outlier,
             if float-type, represents the ratio of the range of each move to the length of each data sample;
             if integer-type, represents the step size of each move.
-        diff_order: int or list or tuple, the order of difference.
+        diff_order : int or list or tuple, the order of difference.
 
         Returns
         -------
@@ -185,11 +185,11 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
-        window_size: int or float. The length of the interval around the outlier,
+        x : array-like
+        window_size : int or float. The length of the interval around the outlier,
             if float-type, represents the ratio of the range of each move to the length of each data sample;
             if integer-type, represents the step size of each move.
-        diff_order: int or list or tuple, the order of difference.
+        diff_order : int or list or tuple, the order of difference.
 
         Returns
         -------
@@ -203,7 +203,7 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x: array-like
+        X : array-like
 
         Returns
         -------
