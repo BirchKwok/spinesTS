@@ -25,7 +25,7 @@ class DataGenerator:
 
         Returns
         -------
-        spinesTS.base.DataTS
+        numpy.ndarray
         """
         assert size is not None and isinstance(size, (int, float)) is True
         assert random_state is None or isinstance(random_state, int) is True
@@ -41,7 +41,7 @@ class DataGenerator:
              np.array([np.cos(i) for i in range(s)]) * sin_cos_noise_fact[1] + \
              np.array([np.random.randn() for i in range(s)]) * sin_cos_noise_fact[2]
 
-        return DataTS(ds)
+        return ds
 
     @staticmethod
     def white_noise(size=1000, mean=0., std=1., random_state=None):
@@ -56,7 +56,7 @@ class DataGenerator:
 
         Returns
         -------
-        spinesTS.base.DataTS
+        numpy.ndarray
         """
         assert size is not None and isinstance(size, (int, float)) is True
         assert random_state is None or isinstance(random_state, int) is True
@@ -69,7 +69,7 @@ class DataGenerator:
 
         ds = np.random.normal(mean, std, size=s)
 
-        return DataTS(ds)
+        return ds
 
     @staticmethod
     def random_walk(size=1000, started_zero=True, random_state=None):
@@ -83,7 +83,7 @@ class DataGenerator:
 
         Returns
         -------
-        spinesTS.base.DataTS
+        numpy.ndarray
         """
         assert size is not None and isinstance(size, (int, float))
         assert random_state is None or isinstance(random_state, int)
@@ -108,4 +108,71 @@ class DataGenerator:
 
         ds = np.array(res)
 
-        return DataTS(ds)
+        return ds
+
+
+class RandomEventGenerator:
+    """Generate a random time series with true seasonal and temporal trends,
+        intermingled with Gaussian noise
+
+    Parameters
+    ----------
+    size : int, number of time collection points.
+    seasons : int, seasonal cycle length.
+    random_state : Random seed.
+
+    Returns
+    -------
+    None
+    """
+    def __init__(self, size=10000, seasons=None, random_state=None):
+        self.seasons = seasons
+        self.size = size
+        self.random_state = random_state
+
+    def seasonal(self):
+        """Get seasonal trends data.
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+        np.random.seed(self.random_state)
+        s = np.random.randn(self.seasons)
+        return np.concatenate(
+            (np.repeat(s, self.size // self.seasons),
+             s[:self.size % self.seasons] if self.size % self.seasons != 0 else []))
+
+    def noise(self):
+        """Get Gaussian noise.
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+        np.random.seed(self.random_state)
+        return np.random.randn(self.size)
+
+    def trend(self):
+        """Get temporal trends.
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+        np.random.seed(self.random_state)
+        return DataGenerator().trigonometry_ds(size=self.size, random_state=self.random_state)
+
+    def get_event(self):
+        """Get event data
+        results = 10 * seasonal + 8 * trend + noise
+
+        Returns
+        -------
+        numpy.ndarray
+        """
+        if self.seasons is not None:
+            return self.seasonal() * 10 + self.trend() * 8 + self.noise()
+        else:
+            return self.trend() * 8 + self.noise()
+
