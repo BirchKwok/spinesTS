@@ -10,6 +10,7 @@ class Hierarchical1d(nn.Module):
     -------
     torch.Tensor
     """
+
     def __init__(self):
         super(Hierarchical1d, self).__init__()
 
@@ -29,18 +30,19 @@ class Hierarchical1d(nn.Module):
 class TrainableMovingAverage1d(nn.Module):
     """Take the moving average of the input sequence.
         accept a 2-dimensional tensor x, and return a 2-dimensional tensor of the shape:
-        (x.shape[0], x.shape[1] // kernel_size + x.shape[1] % kernel_size)
+            (x.shape[0], x.shape[1] - kernel_size)
 
     Parameters
     ----------
-    kernel_size: int, moving average window size
-    weighted: bool, if true, it is a weighted moving average and the weight is a trainable parameter;
+    kernel_size : int, moving average window size
+    weighted : bool, if true, it is a weighted moving average and the weight is a trainable parameter;
         otherwise, it is a simple moving average
-
+    device : torch Tensor device.
     Returns
     -------
     torch.Tensor
     """
+
     def __init__(self, kernel_size, weighted=True, device=None):
         super(TrainableMovingAverage1d, self).__init__()
         self.kernel_size = kernel_size
@@ -53,41 +55,24 @@ class TrainableMovingAverage1d(nn.Module):
     def forward(self, x):
         assert x.ndim == 2, "MovingAverageLayer accept a two dims input."
         rows, cols = x.shape
-        res = torch.empty((rows, cols // self.kernel_size + cols % self.kernel_size), device=self.device)
+        col = cols - self.kernel_size
+
+        res = torch.empty((rows, col), device=self.device)
         for i in range(rows):
-            for j in range(cols // self.kernel_size + cols % self.kernel_size):
-                if j * self.kernel_size < cols:
-                    _ = x[i, j * self.kernel_size: (j+1) * self.kernel_size]
-                    if len(_) < self.kernel_size:
-                        _ = torch.concat((_, torch.zeros(self.kernel_size - len(_), device=self.device)))
-                    if self.weighted:
-                        res[i, j] = torch.sum(torch.mul(_, self.weighted))
+            for j in range(cols-self.kernel_size):
+                _ = j + self.kernel_size
+                if _ < cols:
+                    _2 = x[i, j: _]
+                    if self.weighted is not None:
+                        res[i, j: _] = torch.sum(torch.mul(_2, self.weighted))
                     else:
-                        res[i, j] = torch.mean(_)
+                        res[i, j: _] = torch.mean(_2)
         return res
 
 
-class SeasonalLayer(nn.Module):
-    """
-
-    Parameters
-    ----------
-    s: int,
-    trainable: bool,
-
-
-    Returns
-    -------
-    torch.Tensor
-
-    """
-    def __init__(self, s, trainable=True):
-        super(SeasonalLayer, self).__init__()
-        self.s = s
-        self.trainable = trainable
+class SeasonalLayer1D(nn.Module):
+    def __init__(self):
+        super(SeasonalLayer1D, self).__init__()
 
     def forward(self, x):
         pass
-
-
-
