@@ -3,8 +3,8 @@ import torch
 from torch import nn
 
 from spinesTS.utils import seed_everything
-from spinesTS.base import TorchModelMixin, DEVICE
-from spinesTS.layers import ResBlock, Hierarchical1d, TrainableDropout
+from spinesTS.base import TorchModelMixin
+from spinesTS.layers import ResBlock, Hierarchical1d
 
 
 class ResDenseBlock(nn.Module):
@@ -13,13 +13,13 @@ class ResDenseBlock(nn.Module):
         self.fc_block_1 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.LayerNorm(out_features),
-            TrainableDropout(p=0.3, device=DEVICE, trainable=True),
+            nn.Dropout(0.3),
             nn.ReLU(),
         )
         self.fc_block_2 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.LayerNorm(out_features),
-            TrainableDropout(p=0.3, device=DEVICE, trainable=True),
+            nn.Dropout(0.3),
             nn.ReLU(),
         )
         self.res_layer_1 = ResBlock()
@@ -122,6 +122,7 @@ class RWDNet(nn.Module):
         x_1 = self.decoder_layer_norm_1(x_1)
         x_2 = self.decoder_layer_norm_2(x_2)
         x = torch.concat((x_1, x_2), dim=-1)
+
         return self.output_layer(x)
 
 

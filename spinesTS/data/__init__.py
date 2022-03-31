@@ -1,4 +1,4 @@
-from ._data_generator import DataGenerator, RandomEventsGenerator
+from ._data_generator import DataGenerator, RandomEventGenerator
 from ._data_loader import (
     LoadElectricDataSets,
     LoadMessagesSentHourDataSets,

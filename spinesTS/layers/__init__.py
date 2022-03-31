@@ -3,4 +3,4 @@ from ._decompose_layers import (
     Hierarchical1d,
 )
 from ._concat_layers import ResBlock
-from ._enhance_layers import GaussianNoise1d, TrainableDropout
+from ._enhance_layers import GaussianNoise1d

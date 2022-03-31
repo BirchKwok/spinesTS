@@ -19,12 +19,13 @@ class ResBlock(nn.Module):
     """
     def __init__(self, trainable=True):
         super(ResBlock, self).__init__()
-        self.coefficient = nn.Parameter(torch.Tensor([1.]))
+        self.coefficient_1 = nn.Parameter(torch.Tensor([1.]))
+        self.coefficient_2 = nn.Parameter(torch.Tensor([1.]))
         self.trainable = trainable
 
     def forward(self, inputs):
         assert len(inputs) == 2, "ResBlock only take a sequence with two elements."
         if self.trainable:
-            return inputs[0] + inputs[1] * self.coefficient
+            return inputs[0] * self.coefficient_1 + inputs[1] * self.coefficient_2
         else:
             return inputs[0] + inputs[1]
