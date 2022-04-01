@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from torch import nn
 
@@ -10,9 +9,6 @@ from spinesTS.layers import ResBlock, Hierarchical1d
 class ResDenseBlock(nn.Module):
     def __init__(self, in_features, out_features):
         super(ResDenseBlock, self).__init__()
-        self.attn_layers = nn.ModuleList([
-            nn.MultiheadAttention(in_features, 1, dropout=0.3) for i in range(2)
-        ])
         self.fc_block_1 = nn.Sequential(
             nn.Linear(in_features, out_features),
             nn.LayerNorm(out_features),
@@ -31,14 +27,12 @@ class ResDenseBlock(nn.Module):
 
     def forward(self, x, init_layer):
         # block 1
-        x, _ = self.attn_layers[0](x, x, x)
         x = self.fc_block_1(x)
         x = self.res_layer_1([init_layer, x])
 
         up_level_layer = x.clone()
 
         # block 2
-        x, _ = self.attn_layers[1](x, x, x)
         x = self.fc_block_2(x)
         x = self.last_res_layer([init_layer, self.res_layer_2([up_level_layer, x])])
 
@@ -52,32 +46,45 @@ class RWDNet(nn.Module):
         self.input_layer_norm = nn.LayerNorm(self.in_features)
         self.encoder_hierarchical_layer = Hierarchical1d()
 
-        linear_input_shape = int(np.ceil(self.in_features / 2))
+        linear_input_shape_odd = self.in_features // 2 + self.in_features % 2
+        linear_input_shape_even = self.in_features // 2
+
         self.encoder_hierarchical_lstm_layers = nn.ModuleList([
-            nn.LSTM(linear_input_shape, linear_input_shape, 1, bidirectional=True) for i in range(2)
+            nn.LSTM(linear_input_shape_odd, linear_input_shape_odd, 1, bidirectional=True),
+            nn.LSTM(linear_input_shape_even, linear_input_shape_even, 1, bidirectional=True),
         ])
 
         self.decoder_hierarchical_lstm_layers = nn.ModuleList([
-            nn.LSTM(self.in_features, linear_input_shape, 1, bidirectional=True) for i in range(2)
+            nn.LSTM(linear_input_shape_odd * 2, linear_input_shape_odd, 1, bidirectional=True),
+            nn.LSTM(linear_input_shape_even * 2, linear_input_shape_even, 1, bidirectional=True),
         ])
 
-        self.encoder_module_list_1 = nn.ModuleList([ResDenseBlock(linear_input_shape, linear_input_shape)
-                                                    for i in range(res_dense_blocks)])
-        self.encoder_module_list_2 = nn.ModuleList([ResDenseBlock(linear_input_shape, linear_input_shape)
+        self.encoder_module_list_1 = nn.ModuleList([
+            ResDenseBlock(linear_input_shape_odd, linear_input_shape_odd)
+            for i in range(res_dense_blocks)])
+
+        self.encoder_module_list_2 = nn.ModuleList([
+            ResDenseBlock(linear_input_shape_even, linear_input_shape_even)
+            for i in range(res_dense_blocks)])
+
+        self.decoder_module_list_1 = nn.ModuleList([ResDenseBlock(linear_input_shape_odd * 2,
+                                                                  linear_input_shape_odd * 2)
                                                     for i in range(res_dense_blocks)])
 
-        self.decoder_module_list_1 = nn.ModuleList([ResDenseBlock(self.in_features, out_features=self.in_features)
+        self.decoder_module_list_2 = nn.ModuleList([ResDenseBlock(linear_input_shape_even * 2,
+                                                                  linear_input_shape_even * 2)
                                                     for i in range(res_dense_blocks)])
-        self.decoder_module_list_2 = nn.ModuleList([ResDenseBlock(self.in_features, out_features=self.in_features)
-                                                    for i in range(res_dense_blocks)])
 
-        self.encoder_layer_norm_1 = nn.LayerNorm(self.in_features)
-        self.encoder_layer_norm_2 = nn.LayerNorm(self.in_features)
+        self.encoder_layer_norm_1 = nn.LayerNorm(linear_input_shape_odd * 2)
+        self.encoder_layer_norm_2 = nn.LayerNorm(linear_input_shape_even * 2)
 
-        self.decoder_layer_norm_1 = nn.LayerNorm(self.in_features)
-        self.decoder_layer_norm_2 = nn.LayerNorm(self.in_features)
+        self.decoder_layer_norm_1 = nn.LayerNorm(linear_input_shape_odd * 2)
+        self.decoder_layer_norm_2 = nn.LayerNorm(linear_input_shape_even * 2)
 
-        self.output_layer = nn.Linear(self.in_features * 2, self.output_features)
+        self.output_layer = nn.Linear(
+            (linear_input_shape_odd + linear_input_shape_even) * 2,
+            self.output_features
+        )
 
     def encoder(self, x):
         x_1, x_2 = self.encoder_hierarchical_layer(x)
