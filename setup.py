@@ -18,12 +18,12 @@ setup(
     author='Birch Kwok',
     author_email='birchkwok@gmail.com',
     install_requires=[
-      'scikit-learn>=1.0.2',
-      'tensorflow>=2.5',
-      'torch>=1.4',
-      'scipy>=1.7.0',
-      'numpy>=1.17.0',
-      'pandas>=1.0.0'
+        'scikit-learn>=1.0.2',
+        'torch>=1.4',
+        'scipy>=1.7.0',
+        'numpy>=1.17.0',
+        'pandas>=1.0.0',
+        'tabulate>=0.8'
     ],
     zip_safe=False,
     include_package_data=True
