@@ -27,6 +27,85 @@ class Hierarchical1d(nn.Module):
         return self.even(x), self.odd(x)
 
 
+class HierarchicalEmbedding(nn.Module):
+    def __init__(self, in_features, kernel=5, dropout=0.5, groups=1, hidden_size=1):
+        super(HierarchicalEmbedding, self).__init__()
+        self.kernel_size = kernel
+        self.dilation = 1
+        self.dropout = dropout
+        self.hidden_size = hidden_size
+        self.groups = groups
+        if self.kernel_size % 2 == 0:
+            pad_l = self.dilation * (self.kernel_size - 2) // 2 + 1  # by default: stride==1
+            pad_r = self.dilation * self.kernel_size // 2 + 1  # by default: stride==1
+        else:
+            pad_l = self.dilation * (self.kernel_size - 1) // 2 + 1  # we fix the kernel size of the second layer as 3.
+            pad_r = self.dilation * (self.kernel_size - 1) // 2 + 1
+
+        modules_P = []
+        modules_U = []
+        modules_psi = []
+        modules_phi = []
+        prev_size = 1
+
+        size_hidden = self.hidden_size
+        modules_P += [
+            nn.ReplicationPad1d((pad_l, pad_r)),
+            nn.Conv1d(in_features * prev_size, int(in_features * size_hidden),
+                      kernel_size=self.kernel_size, dilation=self.dilation, stride=1, groups=self.groups),
+            nn.LeakyReLU(negative_slope=0.01, inplace=True),
+            nn.Dropout(self.dropout),
+            nn.Conv1d(int(in_features * size_hidden), in_features,
+                      kernel_size=3, stride=1, groups=self.groups),
+            nn.Tanh()
+        ]
+        modules_U += [
+            nn.ReplicationPad1d((pad_l, pad_r)),
+            nn.Conv1d(in_features * prev_size, int(in_features * size_hidden),
+                      kernel_size=self.kernel_size, dilation=self.dilation, stride=1, groups=self.groups),
+            nn.LeakyReLU(negative_slope=0.01, inplace=True),
+            nn.Dropout(self.dropout),
+            nn.Conv1d(int(in_features * size_hidden), in_features,
+                      kernel_size=3, stride=1, groups=self.groups),
+            nn.Tanh()
+        ]
+
+        modules_phi += [
+            nn.ReplicationPad1d((pad_l, pad_r)),
+            nn.Conv1d(in_features * prev_size, int(in_features * size_hidden),
+                      kernel_size=self.kernel_size, dilation=self.dilation, stride=1, groups=self.groups),
+            nn.LeakyReLU(negative_slope=0.01, inplace=True),
+            nn.Dropout(self.dropout),
+            nn.Conv1d(int(in_features * size_hidden), in_features,
+                      kernel_size=3, stride=1, groups=self.groups),
+            nn.Tanh()
+        ]
+        modules_psi += [
+            nn.ReplicationPad1d((pad_l, pad_r)),
+            nn.Conv1d(in_features * prev_size, int(in_features * size_hidden),
+                      kernel_size=self.kernel_size, dilation=self.dilation, stride=1, groups=self.groups),
+            nn.LeakyReLU(negative_slope=0.01, inplace=True),
+            nn.Dropout(self.dropout),
+            nn.Conv1d(int(in_features * size_hidden), in_features,
+                      kernel_size=3, stride=1, groups=self.groups),
+            nn.Tanh()
+        ]
+        self.phi = nn.Sequential(*modules_phi)
+        self.psi = nn.Sequential(*modules_psi)
+        self.P = nn.Sequential(*modules_P)
+        self.U = nn.Sequential(*modules_U)
+
+    def forward(self, x_even, x_odd):
+
+        x_even = x_even.permute(0, 2, 1)
+        x_odd = x_odd.permute(0, 2, 1)
+
+        d = x_odd - self.P(x_even)
+        c = x_even + self.U(d)
+
+        return c, d
+
+
 class TrainableMovingAverage1d(nn.Module):
     """Take the moving average of the input sequence.
         accept a 2-dimensional tensor x, and return a 2-dimensional tensor of the shape:
@@ -37,16 +116,14 @@ class TrainableMovingAverage1d(nn.Module):
     kernel_size : int, moving average window size
     weighted : bool, if true, it is a weighted moving average and the weight is a trainable parameter;
         otherwise, it is a simple moving average
-    device : torch Tensor device.
     Returns
     -------
     torch.Tensor
     """
 
-    def __init__(self, kernel_size, weighted=True, device=None):
+    def __init__(self, kernel_size, weighted=True):
         super(TrainableMovingAverage1d, self).__init__()
         self.kernel_size = kernel_size
-        self.device = device
         if weighted:
             self.weighted = nn.Parameter(torch.randn(self.kernel_size))
         else:
@@ -57,9 +134,9 @@ class TrainableMovingAverage1d(nn.Module):
         rows, cols = x.shape
         col = cols - self.kernel_size
 
-        res = torch.empty((rows, col), device=self.device)
+        res = torch.empty((rows, col), device=x.device)
         for i in range(rows):
-            for j in range(cols-self.kernel_size):
+            for j in range(cols - self.kernel_size):
                 _ = j + self.kernel_size
                 if _ < cols:
                     _2 = x[i, j: _]
@@ -68,11 +145,3 @@ class TrainableMovingAverage1d(nn.Module):
                     else:
                         res[i, j: _] = torch.mean(_2)
         return res
-
-
-class SeasonalLayer1D(nn.Module):
-    def __init__(self):
-        super(SeasonalLayer1D, self).__init__()
-
-    def forward(self, x):
-        pass
