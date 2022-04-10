@@ -1,7 +1,8 @@
 import re
 import pandas as pd
 import os
-from spinesTS.base._const import DataTS
+from tabulate import tabulate
+from spinesTS.base import DataTS
 
 FILE_PATH = os.path.dirname(__file__)
 
@@ -77,14 +78,14 @@ class BuiltInSeriesData:
     def __init__(self, print_file_list=True):
         self.file_list = sorted(os.listdir(os.path.join(FILE_PATH, './built-in-datasets/')))
         if print_file_list:
-            print(
-                "Existing CSV file list: \n",
-                f"\r{'>> ' * 12}\n",
-                '\r    '.join([f'[{i:>2}] ' + re.split('\.', self.file_list[i])[0].strip() + '\n' if i != 0
-        else '\r    ' + f'[{i:>2}] ' + re.split('\.', self.file_list[i])[0].strip() + '\n'
-                               for i in range(len(self.file_list))]),
-                f"\r{'<< ' * 12}"
-            )
+            table = []
+            for i in range(len(self.file_list)):
+                _ = []
+                _.append(re.split('\.', self.file_list[i])[0].strip())
+                _.append(', '.join(self[i].dataset.columns.tolist()))
+                table.append(_)
+            print(tabulate(table, headers=["table's name", "table's columns"], showindex="always",
+                    tablefmt="pretty", colalign=("right","left", "left")))
 
     def __getitem__(self, item):
         if isinstance(item, int):
