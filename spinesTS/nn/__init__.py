@@ -1,2 +1,8 @@
+__all__ = [
+    'DenseNet', 'WeightedDenseRNN', 'Time2VecNet'
+]
+
+
 from ._dense_net import DenseNet
-from ._recurrent_weighted_dense_net import RecurrentWeightedDenseNet
+from ._weighted_dense_rnn import WeightedDenseRNN
+from ._time2vec_net import Time2VecNet
