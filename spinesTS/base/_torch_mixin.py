@@ -8,7 +8,6 @@ from spinesTS.metrics import mean_absolute_error
 from spinesTS.utils import torch_summary
 
 
-
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 PIN_MEMORY = True if torch.cuda.is_available() else False
 
