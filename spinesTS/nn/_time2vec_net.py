@@ -28,7 +28,6 @@ class T2V(nn.Module):
         else:
             x = x1
 
-
         return self.linear(x)
 
 
@@ -39,7 +38,6 @@ class Time2VecNet(TorchModelMixin):
         self.learning_rate = learning_rate
         self.flip_features = flip_features
         self.model, self.loss_fn, self.optimizer = self.call()
-
 
     def call(self):
         model = T2V(self.in_features, self.out_features, flip_features=self.flip_features)

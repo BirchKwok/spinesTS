@@ -7,39 +7,81 @@ from spinesTS.layers import ResDenseBlock, Hierarchical1d
 
 
 class WeightedEncoder(nn.Module):
-    def __init__(self, in_features):
+    def __init__(self, in_features, rin=True):
         super(WeightedEncoder, self).__init__()
         self.hierarchical1d = Hierarchical1d()
 
-        odd_shape = in_features // 2 + in_features % 2
-        even_shape = in_features // 2
-        self.res_dense_blocks1 = ResDenseBlock(odd_shape)
+        self.RIN = rin
 
-        self.res_dense_blocks2 = ResDenseBlock(even_shape)
+        self.odd_shape = in_features // 2 + in_features % 2
+        self.even_shape = in_features // 2
+        self.res_dense_blocks1 = ResDenseBlock(self.odd_shape)
 
-        self.res_dense_blocks3 = ResDenseBlock(odd_shape)
+        self.res_dense_blocks2 = ResDenseBlock(self.even_shape)
 
-        self.res_dense_blocks4 = ResDenseBlock(even_shape)
+        self.res_dense_blocks3 = ResDenseBlock(self.even_shape)
+
+        self.res_dense_blocks4 = ResDenseBlock(self.even_shape)
 
         self.padding = nn.ReflectionPad1d((0, 1))
 
+        self.lstms = nn.ModuleList([
+            nn.LSTM(self.odd_shape, self.odd_shape), nn.LSTM(self.even_shape, self.even_shape)
+        ])
+
+        if self.RIN:
+            self.affine_weight_odd = nn.Parameter(torch.ones(1, self.odd_shape))
+            self.affine_bias_odd = nn.Parameter(torch.zeros(1, self.odd_shape))
+            self.affine_weight_even = nn.Parameter(torch.ones(1, self.even_shape))
+            self.affine_bias_even = nn.Parameter(torch.zeros(1, self.even_shape))
+
+    def rin_transform(self, x, name='odd'):
+        means = x.mean(1, keepdim=True).detach()
+        # mean
+        x = x - means
+        # var
+        stdev = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5)
+        x = x / stdev
+        # affine
+        # print(x.shape,self.affine_weight.shape,self.affine_bias.shape)
+        x = x * (self.affine_weight_odd if name == 'odd' else self.affine_weight_even) + \
+            (self.affine_bias_odd if name == 'odd' else self.affine_bias_even)
+
+        return x, stdev, means
+
+    def rin_inverse(self, x, stdev, means, name='odd'):
+        x = x - (self.affine_bias_odd if name == 'odd' else self.affine_bias_even)
+        x = x / ((self.affine_weight_odd if name == 'odd' else self.affine_weight_even) + 1e-10)
+        x = x * stdev
+        x = x + means
+        return x
+
     def forward(self, x):
         x_odd, x_even = self.hierarchical1d(x)
-        first_layer_1, first_layer_2 = x_odd.clone(), x_even.clone()
+        if self.RIN:
+            x_odd, odd_stdev, odd_means = self.rin_transform(x_odd, name='odd')
+            x_even, even_stdev, even_means = self.rin_transform(x_even, name='even')
 
         if x_odd.shape[1] > x_even.shape[1]:
-            c = x_odd[:, 1:].mul(torch.exp(self.res_dense_blocks2(x_even, first_layer_1)))
-            d = self.padding(x_even).mul(torch.exp(self.res_dense_blocks1(x_odd, first_layer_1)))
+            c = self.res_dense_blocks2(x_even, x_odd[:, 1:])
+            d = self.res_dense_blocks1(x_odd, self.padding(x_even))
 
-            x_odd_update = d - self.padding(self.res_dense_blocks3(c))
-            x_even_update = c + self.res_dense_blocks4(d[:, 1:])
+            x_odd_update = d - self.padding(self.res_dense_blocks3(c, x_even))
+            x_even_update = c + self.res_dense_blocks4(d[:, 1:], x_odd[:, 1:])
 
         else:
-            d = x_odd.mul(torch.exp(self.res_dense_blocks2(x_even, first_layer_1)))
-            c = x_even.mul(torch.exp(self.res_dense_blocks1(x_odd, first_layer_1)))
+            c = self.res_dense_blocks2(x_even, x_odd)
+            d = self.res_dense_blocks1(x_odd, x_even)
 
-            x_odd_update = d - self.res_dense_blocks3(c, c)
-            x_even_update = c + self.res_dense_blocks4(d, d)
+            x_odd_update = d - self.res_dense_blocks3(c, x_even)
+            x_even_update = c + self.res_dense_blocks4(d, x_odd)
+
+        x_odd_update = torch.squeeze(self.lstms[0](x_odd_update.view(1, -1, self.odd_shape))[0])
+        x_even_update = torch.squeeze(self.lstms[1](x_even_update.view(1, -1, self.even_shape))[0])
+
+        if self.RIN:
+            x_odd_update = self.rin_inverse(x_odd_update, odd_stdev, odd_means, name='odd')
+            x_even_update = self.rin_inverse(x_even_update, even_stdev, even_means, name='even')
 
         return x_odd_update, x_even_update
 
@@ -47,114 +89,36 @@ class WeightedEncoder(nn.Module):
 class EncoderTree(nn.Module):
     def __init__(self, in_features, level):
         super(EncoderTree, self).__init__()
-        self.level = level
+        self.level = level - 1
         self.encoder = WeightedEncoder(in_features)
         if self.level != 0:
-            pass
-
+            odd_shape = in_features // 2 + in_features % 2
+            even_shape = in_features // 2
+            self.sub_odd_encoder = WeightedEncoder(odd_shape)
+            self.sub_even_encoder = WeightedEncoder(even_shape)
 
     def forward(self, x):
-        return
+        if self.level == 0:
+            return torch.cat(self.encoder(x), dim=-1)
+        else:
+            x_odd, x_even = self.encoder(x)
+            return torch.cat((torch.cat(self.sub_odd_encoder(x_odd), -1), torch.cat(self.sub_even_encoder(x_even), -1)),
+                             dim=-1)
+
 
 class WeightedDenseRNNBase(nn.Module):
-    def __init__(self, in_features, output_features, res_dense_blocks=4):
+    def __init__(self, in_features, output_features, level=4):
         super(WeightedDenseRNNBase, self).__init__()
         self.in_features, self.output_features = in_features, output_features
-
-        self.input_layer_norm = nn.LayerNorm(self.in_features)
-        self.encoder_hierarchical_layer = Hierarchical1d()
-
-        linear_input_shape_odd = self.in_features // 2 + self.in_features % 2
-        linear_input_shape_even = self.in_features // 2
-
-        self.weighted_encoder = WeightedEncoder(linear_input_shape_odd, linear_input_shape_even)
-
-        # self.encoder_hierarchical_lstm_layers = nn.ModuleList([
-        #     nn.LSTM(linear_input_shape_odd, linear_input_shape_odd, 1, bidirectional=True),
-        #     nn.LSTM(linear_input_shape_even, linear_input_shape_even, 1, bidirectional=True),
-        # ])
-
-        # self.decoder_hierarchical_lstm_layers = nn.ModuleList([
-        #     nn.LSTM(linear_input_shape_odd * 2, linear_input_shape_odd, 1, bidirectional=True),
-        #     nn.LSTM(linear_input_shape_even * 2, linear_input_shape_even, 1, bidirectional=True),
-        # ])
-
-        # self.encoder_module_list_1 = nn.ModuleList([
-        #     ResDenseBlock(linear_input_shape_odd, linear_input_shape_odd)
-        #     for i in range(res_dense_blocks)])
-        #
-        # self.encoder_module_list_2 = nn.ModuleList([
-        #     ResDenseBlock(linear_input_shape_even, linear_input_shape_even)
-        #     for i in range(res_dense_blocks)])
-
-        # self.decoder_module_list_1 = nn.ModuleList([ResDenseBlock(linear_input_shape_odd * 2,
-        #                                                           linear_input_shape_odd * 2)
-        #                                             for i in range(res_dense_blocks)])
-        #
-        # self.decoder_module_list_2 = nn.ModuleList([ResDenseBlock(linear_input_shape_even * 2,
-        #                                                           linear_input_shape_even * 2)
-        #                                             for i in range(res_dense_blocks)])
-
-        # self.encoder_layer_norm_1 = nn.LayerNorm(linear_input_shape_odd * 2)
-        # self.encoder_layer_norm_2 = nn.LayerNorm(linear_input_shape_even * 2)
-
-        # self.decoder_layer_norm_1 = nn.LayerNorm(linear_input_shape_odd * 2)
-        # self.decoder_layer_norm_2 = nn.LayerNorm(linear_input_shape_even * 2)
+        self.encoder_tree = EncoderTree(in_features, level=level)
 
         self.output_layer = nn.Linear(
-            (linear_input_shape_odd + linear_input_shape_even),
+            in_features,
             self.output_features
         )
-    #
-    # def encoder(self, x):
-    #
-    #     first_layer_1, first_layer_2 = x_1.clone(), x_2.clone()
-    #
-    #     for layer in self.encoder_module_list_1:
-    #         x_1 = layer(x_1, first_layer_1)
-    #
-    #     for layer in self.encoder_module_list_2:
-    #         x_2 = layer(x_2, first_layer_2)
-
-        # x_1 = x_1.permute(2, 0, 1)
-        # x_1 = self.encoder_hierarchical_lstm_layers[0](x_1)[0]
-        # x_1 = torch.squeeze(x_1)
-        #
-        # x_2 = x_2.permute(2, 0, 1)
-        # x_2 = self.encoder_hierarchical_lstm_layers[1](x_2)[0]
-        # x_2 = torch.squeeze(x_2)
-
-        # return x_1, x_2
-
-    # def decoder(self, x_1, x_2):
-    #     x_1 = torch.unsqueeze(x_1, 0)
-    #     x_1 = self.decoder_hierarchical_lstm_layers[0](x_1)[0]
-    #     x_1 = torch.squeeze(x_1)
-    #
-    #     x_2 = torch.unsqueeze(x_2, 0)
-    #     x_2 = self.decoder_hierarchical_lstm_layers[1](x_2)[0]
-    #     x_2 = torch.squeeze(x_2)
-    #
-    #     first_layer_1, first_layer_2 = x_1.clone(), x_2.clone()
-    #
-    #     for layer in self.decoder_module_list_1:
-    #         x_1 = layer(x_1, first_layer_1)
-    #
-    #     for layer in self.decoder_module_list_2:
-    #         x_2 = layer(x_2, first_layer_2)
-
-        # return x_1, x_2
 
     def forward(self, x):
-        first_layer = self.input_layer_norm(x)
-        x_1, x_2 = self.encoder_hierarchical_layer(first_layer)
-        x_1, x_2 = self.weighted_encoder(x_1, x_2)
-        # x_1 = self.encoder_layer_norm_1(x_1)
-        # x_2 = self.encoder_layer_norm_2(x_2)
-        # x_1, x_2 = self.decoder(x_1, x_2)
-        # x_1 = self.decoder_layer_norm_1(x_1)
-        # x_2 = self.decoder_layer_norm_2(x_2)
-        x = torch.concat((x_1, x_2), dim=-1)
+        x = self.encoder_tree(x)
 
         return self.output_layer(x)
 
@@ -170,7 +134,7 @@ class WeightedDenseRNN(TorchModelMixin):
             in_features,
             out_features,
             learning_rate=0.0001,
-            res_dense_blocks=1,
+            level=1,
             random_seed=42
     ):
         assert in_features > 1, "in_features must be greater than 1."
@@ -179,12 +143,12 @@ class WeightedDenseRNN(TorchModelMixin):
         self.learning_rate = learning_rate
         self.model, self.loss_fn, self.optimizer = None, None, None
 
-        self.res_dense_blocks = res_dense_blocks
+        self.level = level
 
         self.model, self.loss_fn, self.optimizer = self.call(self.in_features)
 
     def call(self, in_features):
-        model = WeightedDenseRNNBase(in_features, self.out_features, self.res_dense_blocks)
+        model = WeightedDenseRNNBase(in_features, self.out_features, self.level)
         loss_fn = nn.HuberLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer

@@ -8,23 +8,23 @@ class Hierarchical1d(nn.Module):
 
     Returns
     -------
-    torch.Tensor
+    torch.Tensor, even, odd
     """
 
     def __init__(self):
         super(Hierarchical1d, self).__init__()
 
     @staticmethod
-    def even(x):
+    def odd(x):
         return x[:, ::2]
 
     @staticmethod
-    def odd(x):
+    def even(x):
         return x[:, 1::2]
 
     def forward(self, x):
         """Returns the odd and even part"""
-        return self.even(x), self.odd(x)
+        return self.odd(x), self.even(x)
 
 
 class HierarchicalEmbedding(nn.Module):
