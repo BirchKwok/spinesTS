@@ -245,7 +245,7 @@ class TorchModelMixin:
                 scheduler.step() if lr_scheduler != 'ReduceLROnPlateau' else scheduler.step(train_loss_current)
                 if last_lr != self.optimizer.state_dict()['param_groups'][0]['lr']:
                     last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
-                    metric_string += f" [* lr: {last_lr:>.5f}] -"
+                    metric_string += f" [*lr: {last_lr:>8}] -" if len(str(last_lr)) <= 8 else f" [*lr: {last_lr:>8}] -\n"
 
             metric_string += f" loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f} -"
 
