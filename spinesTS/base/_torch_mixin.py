@@ -3,11 +3,14 @@ import time
 import numpy as np
 import torch
 from torch import nn
-
+from torch.utils.data import TensorDataset, DataLoader
 from spinesTS.metrics import mean_absolute_error
 from spinesTS.utils import torch_summary
 
+
+
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+PIN_MEMORY = True if torch.cuda.is_available() else False
 
 
 class TorchModelMixin:
@@ -17,23 +20,33 @@ class TorchModelMixin:
         ```python
         class Model(TorchModelMixin):
             def __init__(self, *args, **kwargs):
-                # do something
+                # if you want to set random seed
+                from spinesTS.utils import seed_everything
+                seed_everything(seed)
+
                 self.call()  # implement your model architecture
 
             def call(self):
-                model = your_model_class()
-                loss_fn = your_loss_function()
-                optimizer = your_optimizer_function()
-                return model, loss_fn, optimizer
+                # model = your_model_class()
+                # loss_fn = your_loss_function()
+                # optimizer = your_optimizer_function()
+                # return model, loss_fn, optimizer
+                pass
 
             def metric(self, y_true, y_pred):
                 # implement your metric function
+                pass
 
             def fit(self, *args, **kwargs):
                 return self._fit(*args, **kwargs)
 
             def predict(self, *args, **kwargs):
                 return self._predict(*args, **kwargs)
+
+            def metric(self, y_true, y_pred):
+                # your metric, default to mae
+                # if you want to use mae, please ignore this implement
+                pass
 
         # To fit something
         model = Model(args, kwargs)
@@ -76,22 +89,17 @@ class TorchModelMixin:
             optimizer,
             batch_size
     ):
-        train_size = len(X)
-        train_num_batches = int(np.ceil(train_size / batch_size))
+        train_data = TensorDataset(X, y)
+        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, pin_memory=PIN_MEMORY)
 
         model.train()  # 将模型设置为训练模式
-
-        train_batch = 0
+        train_batch = len(train_loader)
         train_loss_current, train_acc = 0, 0
-
-        for i in range(train_num_batches):
-            x_train = X[train_batch * batch_size: (train_batch + 1) * batch_size]
-            y_train = y[train_batch * batch_size: (train_batch + 1) * batch_size]
-            x_train, y_train = x_train.to(DEVICE), y_train.to(DEVICE)
-
+        for batch_ndx, (x_, y_) in enumerate(train_loader):
+            x_, y_ = x_.to(DEVICE), y_.to(DEVICE)
             # 计算预测误差
-            train_pred = model(x_train)
-            train_loss = loss_fn(train_pred, y_train)
+            train_pred = model(x_)
+            train_loss = loss_fn(train_pred, y_)
 
             # 反向传播
             optimizer.zero_grad()  # 先将优化器中的累计梯度置空
@@ -100,10 +108,10 @@ class TorchModelMixin:
 
             optimizer.step()  # 对当前步骤执行优化
 
-            train_acc += self.metric(y_train.detach().cpu().numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
+            train_acc += self.metric(y_.detach().cpu().numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
             train_loss_current = train_loss.item()
 
-            train_batch += 1
+            # train_batch += 1
 
         return train_loss_current, train_acc / train_batch
 
@@ -116,21 +124,19 @@ class TorchModelMixin:
             batch_size
     ):
         X_t, y_t = torch.Tensor(X), torch.Tensor(y)
-        test_size = len(X_t)
-        model.eval()  # 将模型设置为预测模式
 
-        test_loss, test_acc, test_num_batches = 0, 0, int(np.ceil(test_size / batch_size))
+        test_data = TensorDataset(X_t, y_t)
+        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, pin_memory=PIN_MEMORY)
+
+        model.eval()  # 将模型设置为预测模式
+        test_loss, test_acc, test_num_batches = 0, 0, len(test_loader)
         with torch.no_grad():  # 测试环节不用计算梯度，减少计算量
-            test_batch = 0
-            for i in range(test_num_batches):
-                x_test = X_t[test_batch * batch_size: (test_batch + 1) * batch_size]
-                y_test = y_t[test_batch * batch_size: (test_batch + 1) * batch_size]
-                x_test, y_test = x_test.to(DEVICE), y_test.to(DEVICE)
-                pred = model(x_test)
-                test_loss += loss_fn(pred, y_test).item()  # 返回一个标量，表示在测试集上的损失
+            for batch_ndx, (x_, y_) in enumerate(test_loader):
+                x_, y_ = x_.to(DEVICE), y_.to(DEVICE)
+                pred = model(x_)
+                test_loss += loss_fn(pred, y_).item()  # 返回一个标量，表示在测试集上的损失
                 # 返回一个标量，表示在测试集上的准确与否
-                test_acc += self.metric(y_test.cpu().numpy(), np.squeeze(pred.cpu().numpy()))
-                test_batch += 1
+                test_acc += self.metric(y_.cpu().numpy(), np.squeeze(pred.cpu().numpy()))
 
         test_loss /= test_num_batches
         test_acc /= test_num_batches
@@ -180,12 +186,17 @@ class TorchModelMixin:
             monitor='val_loss',
             min_delta=0,
             patience=10,
-            use_lr_scheduler=True,
+            lr_scheduler='ReduceLROnPlateau',
             lr_scheduler_patience=10,
-            lr_factor=0.7,
+            lr_factor=0.5,
             restore_best_weights=True,
-            verbose=True
+            verbose=True,
+            **lr_scheduler_kwargs
     ):
+        """
+        lr_Sceduler: torch.optim.lr_scheduler class, 
+            only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
+        """
 
         assert eval_set is None or isinstance(eval_set, (list, tuple))
         assert monitor in ('loss', 'val_loss', None)
@@ -206,10 +217,18 @@ class TorchModelMixin:
         self.best_weight = copy.deepcopy(self.model.state_dict())
         batches = int(np.ceil(len(X) / self._batch_size))
 
-        if use_lr_scheduler:
+        if lr_scheduler == 'ReduceLROnPlateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
                                                                    mode='min' if loss_type == 'down' else 'max',
-                                                                   patience=lr_scheduler_patience, factor=lr_factor)
+                                                                   patience=lr_scheduler_patience, factor=lr_factor, **lr_scheduler_kwargs)
+        elif lr_scheduler == 'CosineAnnealingLR':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=5, eta_min=0, **lr_scheduler_kwargs)
+        elif lr_scheduler == 'CosineAnnealingWarmRestarts':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=5,T_mult=2, **lr_scheduler_kwargs)
+        elif lr_scheduler == None:
+            pass
+        else:
+            raise KeyError(f"{lr_scheduler} is invalid.")
 
         for epoch in range(epochs):
             tik = time.time()
@@ -221,12 +240,12 @@ class TorchModelMixin:
             train_loss_current, train_acc = self.train(X, y, model=self.model, loss_fn=self.loss_fn,
                                                        optimizer=self.optimizer, batch_size=self._batch_size)
 
-            if use_lr_scheduler:
+            if lr_scheduler:
                 last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
-                scheduler.step(train_loss_current, epoch)
+                scheduler.step() if lr_scheduler != 'ReduceLROnPlateau' else scheduler.step(train_loss_current)
                 if last_lr != self.optimizer.state_dict()['param_groups'][0]['lr']:
                     last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
-                    metric_string += f"\n Changed learning rate to {last_lr} -\n"
+                    metric_string += f" [* lr: {last_lr:>.5f}] -"
 
             metric_string += f" loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f} -"
 
