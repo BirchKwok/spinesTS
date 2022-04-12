@@ -25,32 +25,21 @@ class GaussianNoise1d(nn.Module):
 
 
 class ResDenseBlock(nn.Module):
-    def __init__(self, in_features, kernel_size=5, dilation=1):
+    def __init__(self, in_features, kernel_size=5, dilation=3):
         super(ResDenseBlock, self).__init__()
         self.kernel_size = kernel_size
         self.in_features = in_features
         self.dilation = dilation
-        # if self.kernel_size % 2 == 0:
-        #     pad_l = self.dilation * (self.kernel_size - 2) // 2 + 1  # by default: stride==1
-        #     pad_r = self.dilation * self.kernel_size // 2 + 1  # by default: stride==1
-        # else:
-        #     pad_l = self.dilation * (self.kernel_size - 1) // 2 + 1  # we fix the kernel size of the second layer as 3.
-        #     pad_r = self.dilation * (self.kernel_size - 1) // 2 + 1
 
         self.fc_blocks = nn.ModuleList([
             nn.Sequential(
-                # nn.Linear(in_features, in_features),
-                # nn.LayerNorm(in_features),
-                # nn.LeakyReLU(),
-                # nn.ReplicationPad1d((pad_l, pad_r)),
                 nn.Conv1d(in_features, in_features,
                           kernel_size=self.kernel_size, dilation=self.dilation, stride=1,
                           padding='same'),
                 nn.LeakyReLU(negative_slope=0.01, inplace=True),
-                nn.Dropout(0.3),
                 nn.Conv1d(in_features, in_features,
                           kernel_size=3, stride=1, padding='same'),
-                nn.Tanh()
+                nn.LeakyReLU(negative_slope=0.01, inplace=True),
             ) for i in range(2)
         ])
         self.res_layer_1 = RecurseResBlock(2, trainable=True)
