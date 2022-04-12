@@ -15,13 +15,13 @@ class WeightedEncoder(nn.Module):
 
         self.odd_shape = in_features // 2 + in_features % 2
         self.even_shape = in_features // 2
-        self.res_dense_blocks1 = ResDenseBlock(self.odd_shape)
+        self.res_dense_blocks1 = ResDenseBlock(self.odd_shape, kernel_size=5)
 
-        self.res_dense_blocks2 = ResDenseBlock(self.even_shape)
+        self.res_dense_blocks2 = ResDenseBlock(self.even_shape, kernel_size=5)
 
-        self.res_dense_blocks3 = ResDenseBlock(self.even_shape)
+        self.res_dense_blocks3 = ResDenseBlock(self.even_shape, kernel_size=3)
 
-        self.res_dense_blocks4 = ResDenseBlock(self.even_shape)
+        self.res_dense_blocks4 = ResDenseBlock(self.even_shape, kernel_size=3)
 
         self.padding = nn.ReflectionPad1d((0, 1))
 
@@ -163,20 +163,25 @@ class WeightedDenseRNN(TorchModelMixin):
             monitor='val_loss',
             min_delta=0,
             patience=10,
-            use_lr_scheduler=False,
+            lr_scheduler='ReduceLROnPlateau',
             lr_scheduler_patience=10,
             lr_factor=0.7,
             restore_best_weights=True,
-            verbose=True
+            verbose=True,
+            **kwargs
     ):
+        """
+        lr_Sceduler: torch.optim.lr_scheduler class, 
+            only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
+        """
         X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
 
         return self._fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
-                         monitor=monitor, use_lr_scheduler=use_lr_scheduler,
+                         monitor=monitor, lr_scheduler=lr_scheduler,
                          lr_scheduler_patience=lr_scheduler_patience,
                          lr_factor=lr_factor,
                          min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
-                         verbose=verbose)
+                         verbose=verbose, **kwargs)
 
     def predict(self, x):
         assert self.model is not None, "model not fitted yet."
