@@ -1,6 +1,6 @@
 __all__ = [
     'TrainableMovingAverage1d', 'Hierarchical1d', 'RecurseResBlock',
-    'GaussianNoise1d', 'ResDenseBlock', 'Time2Vec'
+    'GaussianNoise1d', 'ResDenseBlock', 'Time2Vec', 'GAU'
 ]
 
 
@@ -12,6 +12,6 @@ from ._concat_layers import RecurseResBlock
 from ._enhance_layers import (
     GaussianNoise1d,
     ResDenseBlock,
-    Time2Vec
+    Time2Vec,
+    GAU
 )
-
