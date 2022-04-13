@@ -1,275 +1,339 @@
-"""Likelihood function and class for the DeepAR framework"""
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-from torch.nn.modules import Module
-from torch.distributions.normal import Normal
-from spinesTS.base import DEVICE
+import torch 
+from torch import nn
+import torch.nn.functional as F 
+from torch.optim import Adam
 
+import numpy as np
+import os
+import random
+import matplotlib.pyplot as plt
+import pickle
+from tqdm import tqdm
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+import util
+from datetime import date
+import argparse
+from progressbar import *
+
+class Gaussian(nn.Module):
+
+    def __init__(self, hidden_size, output_size):
+        '''
+        Gaussian Likelihood Supports Continuous Data
+        Args:
+        input_size (int): hidden h_{i,t} column size
+        output_size (int): embedding size
+        '''
+        super(Gaussian, self).__init__()
+        self.mu_layer = nn.Linear(hidden_size, output_size)
+        self.sigma_layer = nn.Linear(hidden_size, output_size)
+
+        # initialize weights
+        # nn.init.xavier_uniform_(self.mu_layer.weight)
+        # nn.init.xavier_uniform_(self.sigma_layer.weight)
+    
+    def forward(self, h):
+        _, hidden_size = h.size()
+        sigma_t = torch.log(1 + torch.exp(self.sigma_layer(h))) + 1e-6
+        sigma_t = sigma_t.squeeze(0)
+        mu_t = self.mu_layer(h).squeeze(0)
+        return mu_t, sigma_t
+
+class NegativeBinomial(nn.Module):
+
+    def __init__(self, input_size, output_size):
+        '''
+        Negative Binomial Supports Positive Count Data
+        Args:
+        input_size (int): hidden h_{i,t} column size
+        output_size (int): embedding size
+        '''
+        super(NegativeBinomial, self).__init__()
+        self.mu_layer = nn.Linear(input_size, output_size)
+        self.sigma_layer = nn.Linear(input_size, output_size)
+    
+    def forward(self, h):
+        _, hidden_size = h.size()
+        alpha_t = torch.log(1 + torch.exp(self.sigma_layer(h))) + 1e-6
+        mu_t = torch.log(1 + torch.exp(self.mu_layer(h)))
+        return mu_t, alpha_t
+
+def gaussian_sample(mu, sigma):
+    '''
+    Gaussian Sample
+    Args:
+    ytrue (array like)
+    mu (array like)
+    sigma (array like): standard deviation
+    gaussian maximum likelihood using log 
+        l_{G} (z|mu, sigma) = (2 * pi * sigma^2)^(-0.5) * exp(- (z - mu)^2 / (2 * sigma^2))
+    '''
+    # likelihood = (2 * np.pi * sigma ** 2) ** (-0.5) * \
+    #         torch.exp((- (ytrue - mu) ** 2) / (2 * sigma ** 2))
+    # return likelihood
+    gaussian = torch.distributions.normal.Normal(mu, sigma)
+    ypred = gaussian.sample(mu.size())
+    return ypred
+
+def negative_binomial_sample(mu, alpha):
+    '''
+    Negative Binomial Sample
+    Args:
+    ytrue (array like)
+    mu (array like)
+    alpha (array like)
+    maximuze log l_{nb} = log Gamma(z + 1/alpha) - log Gamma(z + 1) - log Gamma(1 / alpha)
+                - 1 / alpha * log (1 + alpha * mu) + z * log (alpha * mu / (1 + alpha * mu))
+    minimize loss = - log l_{nb}
+    Note: torch.lgamma: log Gamma function
+    '''
+    var = mu + mu * mu * alpha
+    ypred = mu + torch.randn(mu.size()) * torch.sqrt(var)
+    return ypred
 
 class DeepAR(nn.Module):
-    def __init__(self, input_size, output_size = 1, encoder_len = 1, 
-        decoder_len = None, encoder = None, 
-        decoder = None, hidden_size = None, num_layers = None, 
-        bias = True, dropout = 0, rnn_hidden_size = None,
-        rnn_layers = None):
-        """
-        Creates a DeepAR NN with LSTM encoder and decoder by default.
-        -----------------------------------------------------------------------
-        
-        Necessary parameters in all cases:
-        
-        :param input_size: The number of features at a single time-step
-        :param output_size: The size of the output at a single time-step
-        :param encoder_len: The length of the encoder input sequence
-        :param decoder_len: The length of the decoder output sequence. Defaults
-        to encoder_len.
-        
-        -----------------------------------------------------------------------
-        Encoder and decoder parameters:
-            :param encoder: If supplied, then please edit forward() accordingly.
-        If None, then a LSTM is used if decoder is also None. Otherwise, an 
-        error is thrown.
-            :param encoder: If supplied, then please edit forward() accordingly.
-        If None, then a LSTM is used if encoder is also None. Otherwise, an 
-        error is thrown.
-            :param rnn_hidden_size: Supply if using custom encoder/decoder. 
-        Otherwise, leave None.
-            :param rnn_layers: Supply if using custom encoder/decoder. 
-        Otherwise, leave None.
-        -----------------------------------------------------------------------
-        If the default LSTM is chosen for the encoder and decoder, then the
-        following LSTM parameters should be specified:
-            :param hidden_size:
-            :param num_layers:
-            :param bias:
-            :param dropout:
-        """
-        assert not ((encoder == None) ^ (decoder == None)), "Either both or none of encoder and decoder can be None"
-            
-        decoder_len = encoder_len if (decoder_len == None) else decoder_len
 
+    def __init__(self, input_size, embedding_size, hidden_size, num_layers, lr=1e-3, likelihood="g"):
         super(DeepAR, self).__init__()
 
-        # If an encoder and decoder are not supplied, then set them to 
-        # LSTMs. There are two cases:
-        #   (1) LSTMs are used, and LSTM parameters are supplied
-        #   (2) LSTMs are not used, and rnn sizes are supplied
-        #
-        if (encoder == None and decoder == None):
-            assert (hidden_size != None and num_layers != None), "Using LSTM, but hidden_size and num_layers not specified!"
-                
-            self.encoder = nn.LSTM(input_size = input_size,
-                                hidden_size = hidden_size,
-                                num_layers = num_layers,
-                                bias = bias,
-                                batch_first = True,
-                                dropout = dropout,
-                                bidirectional = False)
-            self.decoder = nn.LSTM(input_size = output_size,
-                                hidden_size = hidden_size,
-                                num_layers = num_layers,
-                                bias = bias,
-                                batch_first = True,
-                                dropout = dropout, 
-                                bidirectional = False)
-            rnn_hidden_size = hidden_size
-            rnn_layers = num_layers
-        else:
-            assert (rnn_hidden_size != None and rnn_layers != None), "Using custom encoder and decoder without specifying rnn sizes!"
-                
-            self.encoder = encoder
-            self.decoder = decoder
-
-        self.squeeze_layers_mu = nn.Linear(rnn_layers, 1)
-        self.squeeze_layers_sig = nn.Linear(rnn_layers, 1)
-        self.probability_mean = nn.Linear(rnn_hidden_size, 
-            output_size)
-        self.probability_std = nn.Linear(rnn_hidden_size,
-            output_size)
-        self.std_softplus = nn.Softplus()
-
-        # Record parameters
-        self.output_size = output_size
-        self.rnn_layers = rnn_layers
-        self.rnn_hidden_size = rnn_hidden_size
-        self.device = DEVICE
-        self.encoder_len = encoder_len
-        self.decoder_len = decoder_len
-        self.in_train_mode = True
-
-    def train(self, mode = True):
-        """ 
-        If training, then pass true target values to decoder. Otherwise,
-        pass value sampled from existing distribution.
-        """
-        super().train(mode)
-        self.in_train_mode = mode
-        self.encoder.train(mode = mode)
-        self.decoder.train(mode = mode)
+        # network
+        self.input_embed = nn.Linear(1, embedding_size)
+        self.encoder = nn.LSTM(embedding_size+input_size, hidden_size, \
+                num_layers, bias=True, batch_first=True)
+        if likelihood == "g":
+            self.likelihood_layer = Gaussian(hidden_size, 1)
+        elif likelihood == "nb":
+            self.likelihood_layer = NegativeBinomial(hidden_size, 1)
+        self.likelihood = likelihood
     
-    def eval(self):
-        """ 
-        If training, then pass true target values to decoder. Otherwise,
-        pass value sampled from existing distribution.
-        """
-        super().eval()
-        self.in_train_mode = False
-        self.encoder.eval()
-        self.decoder.eval()
-
-    def forward(self, input, target, hidden_encoder = None, 
-        cell_encoder = None):
-        """
-        Performs a forward pass.[*]
-        [*] - Edit this code if using a custom rnn encoder/decoder or 
-        non-Gaussian distribution.
-        -----------------------------------------------------------------------
-        Requires:
-            * For training, `input` and `target` are individual sequences of 
-        encoder and decoder length respectively. For testing, `input` and 
-        `target` are sequences of encoder length and length 1 respectively.
-        It is the responsibility of the caller to appropriately zero pad inputs 
-        and targets. The original paper does not pad the targets, only inputs.
-        -----------------------------------------------------------------------
-        :param input: Input tensor of shape [batch_size, encoder_len, input_size]
-        :param target: If training, the ground truth. If testing, the last
-        observed target value.
-        :return outputs: Tensor of shape [batch_size, decoder_len, output_size]
-        :return mu_collection: Tensor of shape [batch_size, decoder_len, 
-        output_size]
-        :return sigma_collection: Tensor of shape [batch_size, decoder_len, 
-        output_size]
-        :return hidden_encoder: Tensor of shape [rnn_layers, batch_size, 
-        rnn_hidden_size] if training. None if testing.
-        :return cell_encoder: Tensor of shape [rnn_layers, batch_size, 
-        rnn_hidden_size] if training. None if testing.
-        -----------------------------------------------------------------------
-        Training Parameters:
+    def forward(self, X, y, Xf):
+        '''
+        Args:
+        X (array like): shape (num_time_series, seq_len, input_size)
+        y (array like): shape (num_time_series, seq_len)
+        Xf (array like): shape (num_time_series, horizon, input_size)
+        Return:
+        mu (array like): shape (batch_size, seq_len)
+        sigma (array like): shape (batch_size, seq_len)
+        '''
+        if isinstance(X, type(np.empty(2))):
+            X = torch.from_numpy(X).float()
+            y = torch.from_numpy(y).float()
+            Xf = torch.from_numpy(Xf).float()
+        num_ts, seq_len, _ = X.size()
+        _, output_horizon, num_features = Xf.size()
+        ynext = None
+        ypred = []
+        mus = []
+        sigmas = []
+        h, c = None, None
+        for s in range(seq_len + output_horizon):
+            if s < seq_len:
+                ynext = y[:, s].view(-1, 1)
+                yembed = self.input_embed(ynext).view(num_ts, -1)
+                x = X[:, s, :].view(num_ts, -1)
+            else:
+                yembed = self.input_embed(ynext).view(num_ts, -1)
+                x = Xf[:, s-seq_len, :].view(num_ts, -1)
+            x = torch.cat([x, yembed], dim=1) # num_ts, num_features + embedding
+            inp = x.unsqueeze(1)
+            if h is None and c is None:
+                out, (h, c) = self.encoder(inp) # h size (num_layers, num_ts, hidden_size)
+            else:
+                out, (h, c) = self.encoder(inp, (h, c))
+            hs = h[-1, :, :]
+            hs = F.relu(hs)
+            mu, sigma = self.likelihood_layer(hs)
+            mus.append(mu.view(-1, 1))
+            sigmas.append(sigma.view(-1, 1))
+            if self.likelihood == "g":
+                ynext = gaussian_sample(mu, sigma)
+            elif self.likelihood == "nb":
+                alpha_t = sigma
+                mu_t = mu
+                ynext = negative_binomial_sample(mu_t, alpha_t)
+            # if without true value, use prediction
+            if s >= seq_len - 1 and s < output_horizon + seq_len - 1:
+                ypred.append(ynext)
+        ypred = torch.cat(ypred, dim=1).view(num_ts, -1)
+        mu = torch.cat(mus, dim=1).view(num_ts, -1)
+        sigma = torch.cat(sigmas, dim=1).view(num_ts, -1)
+        return ypred, mu, sigma
     
-        :param target: Target output tensor of shape [batch_size, decoder_len, 
-            output_size]. 
-        :param hidden_encoder: Include for persistent states.
-        :param cell_encoder: [SEE ABOVE]
-        -----------------------------------------------------------------------
-        Testing Parameters:
-        :param target: Target output tensor of shape [batch_size, 1, output_size]
-        """
-        batch_size = input.size()[0]
+def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
+    '''
+    Args:
+    X (array like): shape (num_samples, num_features, num_periods)
+    y (array like): shape (num_samples, num_periods)
+    num_obs_to_train (int):
+    seq_len (int): sequence/encoder/decoder length
+    batch_size (int)
+    '''
+    num_ts, num_periods, _ = X.shape
+    if num_ts < batch_size:
+        batch_size = num_ts
+    t = random.choice(range(num_obs_to_train, num_periods-seq_len))
+    batch = random.sample(range(num_ts), batch_size)
+    X_train_batch = X[batch, t-num_obs_to_train:t, :]
+    y_train_batch = y[batch, t-num_obs_to_train:t]
+    Xf = X[batch, t:t+seq_len]
+    yf = y[batch, t:t+seq_len]
+    return X_train_batch, y_train_batch, Xf, yf
 
-        # If not provided for training, zero-initialize the encoder's hidden
-        # and cell layers
-        if (self.in_train_mode and hidden_encoder == None and cell_encoder == None):
-            hidden_encoder = torch.zeros(self.rnn_layers, batch_size, 
-                self.rnn_hidden_size, device = self.device)
-            cell_encoder = torch.zeros(self.rnn_layers, batch_size, 
-                self.rnn_hidden_size, device = self.device)
-        # Accomodate batch mismatches
-        elif (self.in_train_mode and (hidden_encoder.size()[1] != batch_size or cell_encoder.size()[1] != batch_size)):
-            hidden_encoder = torch.zeros(self.rnn_layers, batch_size, 
-                self.rnn_hidden_size, device = self.device)
-            cell_encoder = torch.zeros(self.rnn_layers, batch_size, 
-                self.rnn_hidden_size, device = self.device)
+def train(
+    X, 
+    y,
+    args
+    ):
+    '''
+    Args:
+    - X (array like): shape (num_samples, num_features, num_periods)
+    - y (array like): shape (num_samples, num_periods)
+    - epoches (int): number of epoches to run
+    - step_per_epoch (int): steps per epoch to run
+    - seq_len (int): output horizon
+    - likelihood (str): what type of likelihood to use, default is gaussian
+    - num_skus_to_show (int): how many skus to show in test phase
+    - num_results_to_sample (int): how many samples in test phase as prediction
+    '''
+    num_ts, num_periods, num_features = X.shape
+    model = DeepAR(num_features, args.embedding_size, 
+        args.hidden_size, args.n_layers, args.lr, args.likelihood)
+    optimizer = Adam(model.parameters(), lr=args.lr)
+    random.seed(2)
+    # select sku with most top n quantities 
+    Xtr, ytr, Xte, yte = util.train_test_split(X, y)
+    losses = []
+    cnt = 0
 
-        # If training, feed in true targets to the decoder. Otherwise, feed in
-        # predictions.
-        if (self.in_train_mode):
-            s_err = "Decoder length ({}) does not match target sequence length ({})"
-            assert (self.decoder_len == target.size()[1]), s_err.format(self.decoder_len, target.size()[1])
-            
-            outputs = torch.zeros(batch_size, self.decoder_len, self.output_size, device = self.device)
-            mu_collection = torch.zeros(batch_size, self.decoder_len, self.output_size, device = self.device)
-            sigma_collection = torch.zeros(batch_size, self.decoder_len, self.output_size, device = self.device)
+    yscaler = None
+    if args.standard_scaler:
+        yscaler = util.StandardScaler()
+    elif args.log_scaler:
+        yscaler = util.LogScaler()
+    elif args.mean_scaler:
+        yscaler = util.MeanScaler()
+    if yscaler is not None:
+        ytr = yscaler.fit_transform(ytr)
 
-            # Encoder pass
-            self.encoder.flatten_parameters()
-            output_encoder, (hidden_encoder, cell_encoder) = \
-                self.encoder(input, (hidden_encoder, cell_encoder))
-            
-            # Decoder pass (single time-step by time-step)
-            hidden_decoder = hidden_encoder
-            cell_decoder = cell_encoder
-            for idx in range(self.decoder_len):
-                # Recall that the lstm is element-by-element (sequence size 1)
-                decoder_input = torch.unsqueeze(target[:, idx, :], 1) 
-
-                self.decoder.flatten_parameters()
-                output_decoder, (hidden_decoder, cell_decoder) = \
-                    self.decoder(decoder_input, (hidden_decoder, cell_decoder))
-                
-                mu = self.squeeze_layers_mu(hidden_decoder.view(self.rnn_hidden_size, 
-                    batch_size, self.rnn_layers))
-                mu = self.probability_mean(mu.view(batch_size, self.rnn_hidden_size))
-                sigma = self.squeeze_layers_sig(hidden_decoder.view(self.rnn_hidden_size, 
-                    batch_size, self.rnn_layers))
-                sigma = self.probability_std(sigma.view(batch_size, self.rnn_hidden_size))
-                sigma = self.std_softplus(sigma)
-                distribution = torch.distributions.normal.Normal(mu, sigma)
-
-                mu_collection[:, idx, :] = mu
-                sigma_collection[:, idx, :] = sigma
-                outputs[:, idx, :] = distribution.sample()
-            return outputs, mu_collection, sigma_collection, hidden_encoder, cell_encoder
-        else:
-            s_err = "Testing with target size {}. Please pass only the most recent observation"
-            assert (target.size()[1] == 1), s_err.format(target.size()[1])
-
-
-            outputs = torch.zeros(batch_size, self.decoder_len, self.output_size, device = self.device)
-            mu_collection = torch.zeros(batch_size, self.decoder_len, self.output_size, device = self.device)
-            sigma_collection = torch.zeros(batch_size, self.decoder_len, self.output_size, device = self.device)
-
-
-            # encoder pass
-            hidden_encoder = torch.zeros(self.rnn_layers, batch_size, 
-                self.rnn_hidden_size, device = self.device)
-            cell_encoder = torch.zeros(self.rnn_layers, batch_size, 
-                self.rnn_hidden_size, device = self.device)
-
-            self.encoder.flatten_parameters()
-            output_encoder, (hidden_encoder, cell_encoder) = self.encoder(input, (hidden_encoder, cell_encoder))
-
-
-            # Decoder pass (single time-step by time-step)
-            hidden_decoder = hidden_encoder
-            cell_decoder = cell_encoder
-            for idx in range(self.decoder_len):
-                decoder_input = target 
-
-                self.decoder.flatten_parameters()
-                output_decoder, (hidden_decoder, cell_decoder) = self.decoder(decoder_input, (hidden_decoder, cell_decoder))
-
-                mu = self.squeeze_layers_mu(hidden_decoder.view(self.rnn_hidden_size, 
-                    batch_size, self.rnn_layers))
-                mu = self.probability_mean(mu.view(batch_size, self.rnn_hidden_size))
-                sigma = self.squeeze_layers_sig(hidden_decoder.view(self.rnn_hidden_size, 
-                    batch_size, self.rnn_layers))
-                sigma = self.probability_std(sigma.view(batch_size, self.rnn_hidden_size))
-                sigma = self.std_softplus(sigma)
-                distribution = torch.distributions.normal.Normal(mu, sigma)
-
-                mu_collection[:, idx, :] = mu
-                sigma_collection[:, idx, :] = sigma
-                outputs[:, idx, :] = distribution.sample()
-                target = torch.unsqueeze(outputs[:, idx, :], 2).clone().detach().to(device = self.device)
-            return outputs, mu_collection, sigma_collection, None, None
-
-
-def loss_deepAR(mu_collection, sigma_collection, target):
-    """
-    Calculate the negative log-likelihood over the decoder length.[*] 
+    # training
+    seq_len = args.seq_len
+    num_obs_to_train = args.num_obs_to_train
+    progress = ProgressBar()
+    for epoch in progress(range(args.num_epoches)):
+        # print("Epoch {} starts...".format(epoch))
+        for step in range(args.step_per_epoch):
+            Xtrain, ytrain, Xf, yf = batch_generator(Xtr, ytr, num_obs_to_train, seq_len, args.batch_size)
+            Xtrain_tensor = torch.from_numpy(Xtrain).float()
+            ytrain_tensor = torch.from_numpy(ytrain).float()
+            Xf = torch.from_numpy(Xf).float()  
+            yf = torch.from_numpy(yf).float()
+            ypred, mu, sigma = model(Xtrain_tensor, ytrain_tensor, Xf)
+            # ypred_rho = ypred
+            # e = ypred_rho - yf
+            # loss = torch.max(rho * e, (rho - 1) * e).mean()
+            ## gaussian loss
+            ytrain_tensor = torch.cat([ytrain_tensor, yf], dim=1)
+            if args.likelihood == "g":
+                loss = util.gaussian_likelihood_loss(ytrain_tensor, mu, sigma)
+            elif args.likelihood == "nb":
+                loss = util.negative_binomial_loss(ytrain_tensor, mu, sigma)
+            losses.append(loss.item())
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            cnt += 1
     
-    [*] - Edit this code if using a non-Gaussian distribution.
-    [*] - Edit this code for non-one output size
-    -----------------------------------------------------------------------
-    :param mu_collection: Tensor of shape [batch_size, decoder_len, 
-    output_size]
-    :param sigma_collection: Tensor of shape [batch_size, decoder_len,
-    output_size]
-    :param target: Target output tensor of shape [batch_size, decoder_len, 
-        output_size]. 
-    """
-    distribution = torch.distributions.normal.Normal(mu_collection, sigma_collection)
-    likelihood = torch.sum(distribution.log_prob(target))
-    return -likelihood
+    # test 
+    mape_list = []
+    # select skus with most top K
+    X_test = Xte[:, -seq_len-num_obs_to_train:-seq_len, :].reshape((num_ts, -1, num_features))
+    Xf_test = Xte[:, -seq_len:, :].reshape((num_ts, -1, num_features))
+    y_test = yte[:, -seq_len-num_obs_to_train:-seq_len].reshape((num_ts, -1))
+    yf_test = yte[:, -seq_len:].reshape((num_ts, -1))
+    if yscaler is not None:
+        y_test = yscaler.transform(y_test)
+    result = []
+    n_samples = args.sample_size
+    for _ in tqdm(range(n_samples)):
+        y_pred, _, _ = model(X_test, y_test, Xf_test)
+        y_pred = y_pred.data.numpy()
+        if yscaler is not None:
+            y_pred = yscaler.inverse_transform(y_pred)
+        result.append(y_pred.reshape((-1, 1)))
+    
+    result = np.concatenate(result, axis=1)
+    p50 = np.quantile(result, 0.5, axis=1)
+    p90 = np.quantile(result, 0.9, axis=1)
+    p10 = np.quantile(result, 0.1, axis=1)
+    
+    mape = util.MAPE(yf_test, p50)
+    print("P50 MAPE: {}".format(mape))
+    mape_list.append(mape)
+
+    if args.show_plot:
+        plt.figure(1, figsize=(20, 5))
+        plt.plot([k + seq_len + num_obs_to_train - seq_len \
+            for k in range(seq_len)], p50, "r-")
+        plt.fill_between(x=[k + seq_len + num_obs_to_train - seq_len for k in range(seq_len)], \
+            y1=p10, y2=p90, alpha=0.5)
+        plt.title('Prediction uncertainty')
+        yplot = yte[-1, -seq_len-num_obs_to_train:]
+        plt.plot(range(len(yplot)), yplot, "k-")
+        plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
+        ymin, ymax = plt.ylim()
+        plt.vlines(seq_len + num_obs_to_train - seq_len, ymin, ymax, color="blue", linestyles="dashed", linewidth=2)
+        plt.ylim(ymin, ymax)
+        plt.xlabel("Periods")
+        plt.ylabel("Y")
+        plt.show()
+    return losses, mape_list
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_epoches", "-e", type=int, default=1000)
+    parser.add_argument("--step_per_epoch", "-spe", type=int, default=2)
+    parser.add_argument("-lr", type=float, default=1e-3)
+    parser.add_argument("--n_layers", "-nl", type=int, default=3)
+    parser.add_argument("--hidden_size", "-hs", type=int, default=64)
+    parser.add_argument("--embedding_size", "-es", type=int, default=64)
+    parser.add_argument("--likelihood", "-l", type=str, default="g")
+    parser.add_argument("--seq_len", "-sl", type=int, default=7)
+    parser.add_argument("--num_obs_to_train", "-not", type=int, default=1)
+    parser.add_argument("--num_results_to_sample", "-nrs", type=int, default=10)
+    parser.add_argument("--show_plot", "-sp", action="store_true")
+    parser.add_argument("--run_test", "-rt", action="store_true")
+    parser.add_argument("--standard_scaler", "-ss", action="store_true")
+    parser.add_argument("--log_scaler", "-ls", action="store_true")
+    parser.add_argument("--mean_scaler", "-ms", action="store_true")
+    parser.add_argument("--batch_size", "-b", type=int, default=64)
+    parser.add_argument("--sample_size", type=int, default=100)
+
+    args = parser.parse_args()
+
+    if args.run_test:
+        data_path = util.get_data_path()
+        data = pd.read_csv(os.path.join(data_path, "LD_MT200_hour.csv"), parse_dates=["date"])
+        data["year"] = data["date"].apply(lambda x: x.year)
+        data["day_of_week"] = data["date"].apply(lambda x: x.dayofweek)
+        data = data.loc[(data["date"] >= date(2014, 1, 1)) & (data["date"] <= date(2014, 3, 1))]
+
+        features = ["hour", "day_of_week"]
+        # hours = pd.get_dummies(data["hour"])
+        # dows = pd.get_dummies(data["day_of_week"])
+        hours = data["hour"]
+        dows = data["day_of_week"]
+        X = np.c_[np.asarray(hours), np.asarray(dows)]
+        num_features = X.shape[1]
+        num_periods = len(data)
+        X = np.asarray(X).reshape((-1, num_periods, num_features))
+        y = np.asarray(data["MT_200"]).reshape((-1, num_periods))
+        # X = np.tile(X, (10, 1, 1))
+        # y = np.tile(y, (10, 1))
+        losses, mape_list = train(X, y, args)
+        if args.show_plot:
+            plt.plot(range(len(losses)), losses, "k-")
+            plt.xlabel("Period")
+            plt.ylabel("Loss")
+            plt.show()
