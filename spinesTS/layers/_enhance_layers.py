@@ -25,7 +25,7 @@ class GaussianNoise1d(nn.Module):
 
 
 class ResDenseBlock(nn.Module):
-    def __init__(self, in_features, kernel_size=5, dilation=3):
+    def __init__(self, in_features, kernel_size=3, dilation=3):
         super(ResDenseBlock, self).__init__()
         self.kernel_size = kernel_size
         self.in_features = in_features
@@ -37,12 +37,10 @@ class ResDenseBlock(nn.Module):
                           kernel_size=self.kernel_size, dilation=self.dilation, stride=1,
                           padding='same'),
                 nn.LeakyReLU(negative_slope=0.01, inplace=True),
-                nn.Conv1d(in_features, in_features,
-                          kernel_size=3, stride=1, padding='same'),
-                nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            ) for i in range(2)
+            ) for i in range(3)
         ])
         self.res_layer_1 = RecurseResBlock(2, trainable=True)
+        self.res_layer_2 = RecurseResBlock(3, trainable=True)
         self.last_res_layer = RecurseResBlock(3, trainable=True)
 
     def forward(self, x, init_layer):
@@ -54,6 +52,12 @@ class ResDenseBlock(nn.Module):
 
         # block 2
         x = self.fc_blocks[1](x.view(-1, self.in_features, 1))
+        x = self.res_layer_2([init_layer, _, x.view(-1, self.in_features)])
+
+        _ = x.clone()
+
+        # block 3
+        x = self.fc_blocks[2](x.view(-1, self.in_features, 1))
         x = self.last_res_layer([init_layer, _, x.view(-1, self.in_features)])
 
         return x

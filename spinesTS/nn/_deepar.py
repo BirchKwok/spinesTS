@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from torch.nn.modules import Module
 from torch.distributions.normal import Normal
-from spinesTS.base import Device
+from spinesTS.base import DEVICE
 
 
 class DeepAR(nn.Module):
@@ -94,7 +94,7 @@ class DeepAR(nn.Module):
         self.output_size = output_size
         self.rnn_layers = rnn_layers
         self.rnn_hidden_size = rnn_hidden_size
-        self.device = Device
+        self.device = DEVICE
         self.encoder_len = encoder_len
         self.decoder_len = decoder_len
         self.in_train_mode = True

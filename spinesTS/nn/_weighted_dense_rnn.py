@@ -66,15 +66,15 @@ class WeightedEncoder(nn.Module):
             c = self.res_dense_blocks2(x_even, x_odd[:, 1:])
             d = self.res_dense_blocks1(x_odd, self.padding(x_even))
 
-            x_odd_update = d - self.padding(self.res_dense_blocks3(c, x_even))
-            x_even_update = c + self.res_dense_blocks4(d[:, 1:], x_odd[:, 1:])
+            x_odd_update = d  # - self.padding(self.res_dense_blocks3(c, x_even))
+            x_even_update = c  # + self.res_dense_blocks4(d[:, 1:], x_odd[:, 1:])
 
         else:
             c = self.res_dense_blocks2(x_even, x_odd)
             d = self.res_dense_blocks1(x_odd, x_even)
 
-            x_odd_update = d - self.res_dense_blocks3(c, x_even)
-            x_even_update = c + self.res_dense_blocks4(d, x_odd)
+            x_odd_update = d  # - self.res_dense_blocks3(c, x_even)
+            x_even_update = c  # + self.res_dense_blocks4(d, x_odd)
 
         x_odd_update = torch.squeeze(self.lstms[0](x_odd_update.view(1, -1, self.odd_shape))[0])
         x_even_update = torch.squeeze(self.lstms[1](x_even_update.view(1, -1, self.even_shape))[0])
@@ -171,7 +171,7 @@ class WeightedDenseRNN(TorchModelMixin):
             **kwargs
     ):
         """
-        lr_Sceduler: torch.optim.lr_scheduler class, 
+        lr_Scheduler: torch.optim.lr_scheduler class,
             only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
         """
         X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)

@@ -63,7 +63,7 @@ class Time2VecNet(TorchModelMixin):
             **kwargs
     ):
         """
-        lr_Sceduler: torch.optim.lr_scheduler class, 
+        lr_Scheduler: torch.optim.lr_scheduler class,
             only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
         """
         X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
