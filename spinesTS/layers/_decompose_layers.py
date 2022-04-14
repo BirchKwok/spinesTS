@@ -116,32 +116,50 @@ class TrainableMovingAverage1d(nn.Module):
     kernel_size : int, moving average window size
     weighted : bool, if true, it is a weighted moving average and the weight is a trainable parameter;
         otherwise, it is a simple moving average
+    padding : str, only support to 'same' and 'valid', valid means not to pad, same means padding with
+    the nearest valid value to the null value
     Returns
     -------
     torch.Tensor
     """
 
-    def __init__(self, kernel_size, weighted=True):
+    def __init__(self, kernel_size, weighted=True, padding='same'):
+        assert padding in ('same', 'valid')
         super(TrainableMovingAverage1d, self).__init__()
+        self.padding = padding
         self.kernel_size = kernel_size
         if weighted:
-            self.weighted = nn.Parameter(torch.randn(self.kernel_size))
+            self.weighted = nn.Parameter(torch.randn(self.kernel_size, 1))
         else:
             self.weighted = None
 
     def forward(self, x):
         assert x.ndim == 2, "MovingAverageLayer accept a two dims input."
         rows, cols = x.shape
-        col = cols - self.kernel_size
 
-        res = torch.empty((rows, col), device=x.device)
-        for i in range(rows):
-            for j in range(cols - self.kernel_size):
-                _ = j + self.kernel_size
-                if _ < cols:
-                    _2 = x[i, j: _]
-                    if self.weighted is not None:
-                        res[i, j: _] = torch.sum(torch.mul(_2, self.weighted))
-                    else:
-                        res[i, j: _] = torch.mean(_2)
+        res = None
+
+        for i in range(cols-self.kernel_size):
+            if self.weighted is not None:
+                _ = x[:, i: i+self.kernel_size] @ self.weighted
+            else:
+                _ = torch.mean(x[:, i: i+self.kernel_size], dim=-1, keepdim=True)
+
+            res = _ if res is None else torch.cat((res, _), dim=-1)
+
+        if self.padding == 'same':
+            return torch.cat((res[:, :self.kernel_size], res), dim=-1)
+
+        # for i in range(rows):
+        #     for j in range(cols - self.kernel_size):
+        #         _ = j + self.kernel_size
+        #         if _ < cols:
+        #             _2 = x[i, j: _]
+        #             if self.weighted is not None:
+        #                 res[i, j: _] = torch.sum(torch.mul(_2, self.weighted))
+        #             else:
+        #                 res[i, j: _] = torch.mean(_2)
+        # if self.padding == 'same':
+        #     return torch.cat((res[:, :self.kernel_size], res), dim=-1)
+
         return res
