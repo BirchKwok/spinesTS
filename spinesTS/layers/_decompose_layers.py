@@ -135,7 +135,7 @@ class TrainableMovingAverage1d(nn.Module):
 
     def forward(self, x):
         assert x.ndim == 2, "MovingAverageLayer accept a two dims input."
-        rows, cols = x.shape
+        _, cols = x.shape
 
         res = None
 
@@ -149,17 +149,5 @@ class TrainableMovingAverage1d(nn.Module):
 
         if self.padding == 'same':
             return torch.cat((res[:, :self.kernel_size], res), dim=-1)
-
-        # for i in range(rows):
-        #     for j in range(cols - self.kernel_size):
-        #         _ = j + self.kernel_size
-        #         if _ < cols:
-        #             _2 = x[i, j: _]
-        #             if self.weighted is not None:
-        #                 res[i, j: _] = torch.sum(torch.mul(_2, self.weighted))
-        #             else:
-        #                 res[i, j: _] = torch.mean(_2)
-        # if self.padding == 'same':
-        #     return torch.cat((res[:, :self.kernel_size], res), dim=-1)
 
         return res
