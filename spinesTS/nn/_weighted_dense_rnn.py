@@ -19,10 +19,6 @@ class WeightedEncoder(nn.Module):
 
         self.res_dense_blocks2 = ResDenseBlock(self.even_shape, kernel_size=5)
 
-        self.res_dense_blocks3 = ResDenseBlock(self.even_shape, kernel_size=3)
-
-        self.res_dense_blocks4 = ResDenseBlock(self.even_shape, kernel_size=3)
-
         self.padding = nn.ReflectionPad1d((0, 1))
 
         self.lstms = nn.ModuleList([
@@ -43,7 +39,6 @@ class WeightedEncoder(nn.Module):
         stdev = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + 1e-5)
         x = x / stdev
         # affine
-        # print(x.shape,self.affine_weight.shape,self.affine_bias.shape)
         x = x * (self.affine_weight_odd if name == 'odd' else self.affine_weight_even) + \
             (self.affine_bias_odd if name == 'odd' else self.affine_bias_even)
 
@@ -63,18 +58,12 @@ class WeightedEncoder(nn.Module):
             x_even, even_stdev, even_means = self.rin_transform(x_even, name='even')
 
         if x_odd.shape[1] > x_even.shape[1]:
-            c = self.res_dense_blocks2(x_even, x_odd[:, 1:])
-            d = self.res_dense_blocks1(x_odd, self.padding(x_even))
-
-            x_odd_update = d  # - self.padding(self.res_dense_blocks3(c, x_even))
-            x_even_update = c  # + self.res_dense_blocks4(d[:, 1:], x_odd[:, 1:])
+            x_even_update = self.res_dense_blocks2(x_even, x_odd[:, 1:])
+            x_odd_update = self.res_dense_blocks1(x_odd, self.padding(x_even))
 
         else:
-            c = self.res_dense_blocks2(x_even, x_odd)
-            d = self.res_dense_blocks1(x_odd, x_even)
-
-            x_odd_update = d  # - self.res_dense_blocks3(c, x_even)
-            x_even_update = c  # + self.res_dense_blocks4(d, x_odd)
+            x_even_update = self.res_dense_blocks2(x_even, x_odd)
+            x_odd_update = self.res_dense_blocks1(x_odd, x_even)
 
         x_odd_update = torch.squeeze(self.lstms[0](x_odd_update.view(1, -1, self.odd_shape))[0])
         x_even_update = torch.squeeze(self.lstms[1](x_even_update.view(1, -1, self.even_shape))[0])
