@@ -34,9 +34,6 @@ class ResDenseBlock(nn.Module):
 
         self.fc_blocks = nn.ModuleList([
             nn.Sequential(
-                # nn.Conv1d(in_features, in_features,
-                #           kernel_size=self.kernel_size, dilation=self.dilation, stride=1,
-                #           padding='same'),
                 TrainableMovingAverage1d(self.kernel_size, padding='same'),
                 nn.LeakyReLU(negative_slope=0.01, inplace=True),
             ) for i in range(3)
