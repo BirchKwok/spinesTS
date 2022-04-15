@@ -2,7 +2,6 @@ import torch
 from torch import nn
 from spinesTS.layers import Time2Vec
 from spinesTS.base import TorchModelMixin
-from spinesTS.utils import seed_everything
 
 
 class T2V(nn.Module):
@@ -33,7 +32,7 @@ class T2V(nn.Module):
 
 class Time2VecNet(TorchModelMixin):
     def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01, random_seed=42):
-        seed_everything(random_seed)
+        super(Time2VecNet, self).__init__(random_seed)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.flip_features = flip_features
@@ -68,13 +67,10 @@ class Time2VecNet(TorchModelMixin):
         """
         X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
 
-        return self._fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
+        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
                          monitor=monitor, lr_scheduler=lr_scheduler,
                          lr_scheduler_patience=lr_scheduler_patience,
                          lr_factor=lr_factor,
                          min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
                          verbose=verbose, **kwargs)
-
-    def predict(self, x):
-        assert self.model is not None, "model not fitted yet."
-        return self._predict(x)
+                         
