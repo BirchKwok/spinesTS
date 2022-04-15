@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-
-from spinesTS.utils import seed_everything
 from spinesTS.base import TorchModelMixin
 from spinesTS.layers import ResDenseBlock, Hierarchical1d
 
@@ -125,9 +123,10 @@ class WeightedDenseRNN(TorchModelMixin):
             learning_rate=0.0001,
             level=1,
             random_seed=42
-    ):
+        ):
+        super(WeightedDenseRNN, self).__init__(random_seed)
+
         assert in_features > 1, "in_features must be greater than 1."
-        seed_everything(random_seed)
         self.out_features, self.in_features = out_features, in_features
         self.learning_rate = learning_rate
         self.model, self.loss_fn, self.optimizer = None, None, None
@@ -159,19 +158,11 @@ class WeightedDenseRNN(TorchModelMixin):
             verbose=True,
             **kwargs
     ):
-        """
-        lr_Scheduler: torch.optim.lr_scheduler class,
-            only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
-        """
         X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
 
-        return self._fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
+        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
                          monitor=monitor, lr_scheduler=lr_scheduler,
                          lr_scheduler_patience=lr_scheduler_patience,
                          lr_factor=lr_factor,
                          min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
                          verbose=verbose, **kwargs)
-
-    def predict(self, x):
-        assert self.model is not None, "model not fitted yet."
-        return self._predict(x)
