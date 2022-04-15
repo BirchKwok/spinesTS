@@ -6,7 +6,7 @@ __all__ = [
 
 
 from ._data_generator import DataGenerator, RandomEventGenerator
-from ._data_loader import (
+from ._data_reader import (
     LoadElectricDataSets,
     LoadMessagesSentHourDataSets,
     LoadMessagesSentDataSets,
