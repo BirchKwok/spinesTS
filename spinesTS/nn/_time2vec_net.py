@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from spinesTS.layers import Time2Vec
+from spinesTS.layers import Time2Vec, SamplingLayer
 from spinesTS.base import TorchModelMixin
 
 
@@ -30,6 +30,18 @@ class T2V(nn.Module):
         return self.linear(x)
 
 
+class T2V2d(nn.Module):
+    def __init__(self, in_shapes, out_features, mid_dim=128, flip_features=False):
+        super(T2V2d, self).__init__()
+        self.in_shapes, self.in_features = in_shapes, mid_dim
+        self.sampling = SamplingLayer(self.in_shapes, out_features=self.in_features)
+        self.t2v = T2V(self.in_features, out_features, flip_features)
+
+    def forward(self, x):
+        x = self.sampling(x)
+        return self.t2v(x)
+
+
 class Time2VecNet(TorchModelMixin):
     def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01, random_seed=42):
         super(Time2VecNet, self).__init__(random_seed)
@@ -39,7 +51,10 @@ class Time2VecNet(TorchModelMixin):
         self.model, self.loss_fn, self.optimizer = self.call()
 
     def call(self):
-        model = T2V(self.in_features, self.out_features, flip_features=self.flip_features)
+        if len(self.in_features) == 2:
+            model = T2V2d(self.in_features, self.out_features, flip_features=self.flip_features)
+        else:
+            model = T2V(self.in_features, self.out_features, flip_features=self.flip_features)
         loss_fn = nn.HuberLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer
@@ -61,16 +76,9 @@ class Time2VecNet(TorchModelMixin):
             verbose=True,
             **kwargs
     ):
-        """
-        lr_Scheduler: torch.optim.lr_scheduler class,
-            only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
-        """
-        X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
-
         return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
-                         monitor=monitor, lr_scheduler=lr_scheduler,
-                         lr_scheduler_patience=lr_scheduler_patience,
-                         lr_factor=lr_factor,
-                         min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
-                         verbose=verbose, **kwargs)
-                         
+                           monitor=monitor, lr_scheduler=lr_scheduler,
+                           lr_scheduler_patience=lr_scheduler_patience,
+                           lr_factor=lr_factor,
+                           min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
+                           verbose=verbose, **kwargs)

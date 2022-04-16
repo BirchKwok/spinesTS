@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from spinesTS.layers import GAU
+from spinesTS.layers import GAU, SamplingLayer
 from spinesTS.base import TorchModelMixin
 
 
@@ -17,7 +17,7 @@ class GAUBase(nn.Module):
 
         self.flip_features = flip_features
         self.linear = nn.Linear(ln_layer_in_fea, out_features)
-        
+
     def forward(self, x):
         x1 = self.gau(x)
         if self.flip_features:
@@ -30,6 +30,18 @@ class GAUBase(nn.Module):
         return self.linear(x)
 
 
+class GAUBase2d(nn.Module):
+    def __init__(self, in_shapes, out_features, mid_dim=128, flip_features=False):
+        super(GAUBase2d, self).__init__()
+        self.in_shapes, self.in_features = in_shapes, mid_dim
+        self.sampling = SamplingLayer(self.in_shapes, out_features=self.in_features)
+        self.gau = GAUBase(self.in_features, out_features, flip_features)
+
+    def forward(self, x):
+        x = self.sampling(x)
+        return self.gau(x)
+
+
 class GAUNet(TorchModelMixin):
     def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01, random_seed=42):
         super(GAUNet, self).__init__(random_seed)
@@ -39,7 +51,10 @@ class GAUNet(TorchModelMixin):
         self.model, self.loss_fn, self.optimizer = self.call()
 
     def call(self):
-        model = GAUBase(self.in_features, self.out_features, flip_features=self.flip_features)
+        if len(self.in_features) == 2:
+            model = GAUBase2d(self.in_features, self.out_features, flip_features=self.flip_features)
+        else:
+            model = GAUBase(self.in_features, self.out_features, flip_features=self.flip_features)
         loss_fn = nn.HuberLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer
@@ -61,12 +76,9 @@ class GAUNet(TorchModelMixin):
             verbose=True,
             **kwargs
     ):
-       
-        X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
-
         return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
-                         monitor=monitor, lr_scheduler=lr_scheduler,
-                         lr_scheduler_patience=lr_scheduler_patience,
-                         lr_factor=lr_factor,
-                         min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
-                         verbose=verbose, **kwargs)
+                           monitor=monitor, lr_scheduler=lr_scheduler,
+                           lr_scheduler_patience=lr_scheduler_patience,
+                           lr_factor=lr_factor,
+                           min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
+                           verbose=verbose, **kwargs)
