@@ -1,6 +1,7 @@
 __all__ = [
     'TrainableMovingAverage1d', 'Hierarchical1d', 'RecurseResBlock',
-    'GaussianNoise1d', 'ResDenseBlock', 'Time2Vec', 'GAU'
+    'GaussianNoise1d', 'ResDenseBlock', 'Time2Vec', 'GAU',
+    'SamplingLayer'
 ]
 
 
@@ -15,3 +16,4 @@ from ._enhance_layers import (
     Time2Vec,
     GAU
 )
+from ._multi_features import SamplingLayer

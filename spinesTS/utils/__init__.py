@@ -1,10 +1,9 @@
 __all__ = [
-    'check_x_y', 'available_if', 'func_has_params',
+    'available_if', 'func_has_params',
     'seed_everything', 'torch_summary', 'one_dim_tensor_del_elements'
 ]
 
 
-from ._validation import check_x_y
 from ._metaestimator import available_if, func_has_params
 from ._set_seed import seed_everything
 from ._torch_summary import torch_summary

@@ -18,14 +18,14 @@ __version__ = "0.0.1"
 
 
 __all__ = [
-    'base', 'data', 'feature_extract', 'layers', 'ml_model', 'nn',
+    'base', 'data', 'features_extractor', 'layers', 'ml_model', 'nn',
     'pipeline', 'plotting', 'preprocessing', 'utils', 'metrics'
 ]
 
 from . import (
     base,
     data,
-    feature_extract,
+    features_extractor,
     layers,
     ml_model,
     nn,
