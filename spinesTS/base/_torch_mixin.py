@@ -77,7 +77,7 @@ class TorchModelMixin:
     """
 
     def __init__(self, seed=None, device=None) -> None:
-        self.seed = seed_everything(seed)
+        seed_everything(seed)
         self.device = DEVICE(device)
         self.model = None
 
@@ -201,23 +201,24 @@ class TorchModelMixin:
         ):
         X, y = self._check_X_y_type(X, y)
         train_data = TensorDataset(X, y)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=False)
 
-        model.train()  # 将模型设置为训练模式
+        model.train()  # set model to training mode
         train_batch = len(train_loader)
         train_loss_current, train_acc = 0, 0
         for batch_ndx, (x, y) in enumerate(train_loader):
             x_, y_ = x.to(self.device), y.to(self.device)
-            # 计算预测误差
+
+            # compute error
             train_pred = model(x_)
             train_loss = loss_fn(train_pred, y_)
 
-            # 反向传播
-            optimizer.zero_grad()  # 先将优化器中的累计梯度置空
+            # backward
+            optimizer.zero_grad()  # clear optimizer gradient
             train_loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.)
 
-            optimizer.step()  # 对当前步骤执行优化
+            optimizer.step()
 
             train_acc += self.metric(y.numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
             train_loss_current = train_loss.item()
@@ -238,14 +239,14 @@ class TorchModelMixin:
         test_data = TensorDataset(X_t, y_t)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-        model.eval()  # 将模型设置为预测模式
+        model.eval()  # set model to evaluate mode
         test_loss, test_acc, test_num_batches = 0, 0, len(test_loader)
-        with torch.no_grad():  # 测试环节不用计算梯度，减少计算量
+        with torch.no_grad():  # with no gradient
             for batch_ndx, (x_, y_) in enumerate(test_loader):
                 x_, y_ = x_.to(self.device), y_.to(self.device)
                 pred = model(x_)
-                test_loss += loss_fn(pred, y_).item()  # 返回一个标量，表示在测试集上的损失
-                # 返回一个标量，表示在测试集上的准确与否
+                test_loss += loss_fn(pred, y_).item()  # scalar
+                # scalar
                 test_acc += self.metric(y_.cpu().numpy(), np.squeeze(pred.cpu().numpy()))
 
         test_loss /= test_num_batches
