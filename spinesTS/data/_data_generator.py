@@ -29,8 +29,7 @@ class DataGenerator:
         """
         assert size is not None and isinstance(size, (int, float)) is True
         assert random_state is None or isinstance(random_state, int) is True
-        assert isinstance(sin_cos_noise_fact, tuple) is True and len(sin_cos_noise_fact) == 3 and \
-               np.sum(sin_cos_noise_fact) == 1
+        assert len(sin_cos_noise_fact) == 3
         np.random.seed(random_state)
         s = int(np.ceil(size))
 
@@ -125,12 +124,15 @@ class RandomEventGenerator:
     -------
     None
     """
-    def __init__(self, size=10000, seasons=None, random_state=None):
+    def __init__(self, size=10000, seasons=None, sin_cos_noise_fact=(0.5, 0.3, 0.2), stacking_level=6, random_state=None):
+        assert isinstance(stacking_level, int)
         self.seasons = seasons
         self.size = size
         self.random_state = random_state
+        self.sin_cos_noise_fact = sin_cos_noise_fact
+        self.stacking_level = stacking_level
 
-    def seasonal(self):
+    def _seasonal(self):
         """Get seasonal trends data.
 
         Returns
@@ -143,7 +145,7 @@ class RandomEventGenerator:
             (np.repeat(s, self.size // self.seasons),
              s[:self.size % self.seasons] if self.size % self.seasons != 0 else []))
 
-    def noise(self):
+    def _noise(self):
         """Get Gaussian noise.
 
         Returns
@@ -153,7 +155,7 @@ class RandomEventGenerator:
         np.random.seed(self.random_state)
         return np.random.randn(self.size)
 
-    def trend(self):
+    def _trend(self, sin_cos_noise_fact):
         """Get temporal trends.
 
         Returns
@@ -161,9 +163,9 @@ class RandomEventGenerator:
         numpy.ndarray
         """
         np.random.seed(self.random_state)
-        return DataGenerator().trigonometry_ds(size=self.size, random_state=self.random_state)
+        return DataGenerator().trigonometry_ds(size=self.size, random_state=self.random_state, sin_cos_noise_fact=sin_cos_noise_fact)
 
-    def get_event(self):
+    def event(self):
         """Get event data
         results = 10 * seasonal + 8 * trend + noise
 
@@ -171,8 +173,19 @@ class RandomEventGenerator:
         -------
         numpy.ndarray
         """
+        sin_cos_noise_facts = [np.random.choice(self.sin_cos_noise_fact, 3) for i in range(self.stacking_level)]
         if self.seasons is not None:
-            return self.seasonal() * 10 + self.trend() * 8 + self.noise()
-        else:
-            return self.trend() * 8 + self.noise()
+            x = self._seasonal() * 10 + self._trend(sin_cos_noise_facts[0]) * 8 + self._noise()
 
+            if self.stacking_level > 1:
+                for i in sin_cos_noise_facts[1:]:
+                    x += self._trend(i) * 8
+
+
+        else:
+            x = self._trend(sin_cos_noise_facts[0]) * 8 + self._noise()
+
+            if self.stacking_level > 1:
+                for i in sin_cos_noise_facts[1:]:
+                    x += self._trend(i) * 8
+        return x
