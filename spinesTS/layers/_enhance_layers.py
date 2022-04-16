@@ -98,13 +98,14 @@ class GAU(nn.Module):
     """Base on Transformer Quality in Linear Time(https://arxiv.org/pdf/2202.10447.pdf)
     
     """
+
     def __init__(
-        self,
-        in_features,
-        query_key_dim = 128,
-        expansion_factor = 2.,
-        add_residual = True,
-        dropout = 0.,
+            self,
+            in_features,
+            query_key_dim=128,
+            expansion_factor=2.,
+            add_residual=True,
+            dropout=0.,
     ):
         super().__init__()
         hidden_dim = int(expansion_factor * in_features)
@@ -126,7 +127,6 @@ class GAU(nn.Module):
         self.beta = nn.Parameter(torch.zeros(2, query_key_dim))
         nn.init.normal_(self.gamma, std=0.02)
 
-
         self.to_out = nn.Sequential(
             nn.Linear(hidden_dim, in_features),
             nn.Dropout(dropout)
@@ -138,7 +138,7 @@ class GAU(nn.Module):
         seq_len = x.shape[-2]
 
         normed_x = self.norm(x)  # (bs,seq_len,dim)
-        v, gate = self.to_hidden(normed_x).chunk(2, dim = -1)  # (bs,seq_len,seq_len)
+        v, gate = self.to_hidden(normed_x).chunk(2, dim=-1)  # (bs,seq_len,seq_len)
 
         Z = self.to_qk(normed_x)  # (bs,seq_len,query_key_dim)
 
@@ -146,7 +146,6 @@ class GAU(nn.Module):
         q, k = QK.unbind(dim=-2)
 
         sim = torch.einsum('i d, j d -> i j', q, k) / seq_len
-
 
         A = F.relu(sim) ** 2
         A = self.dropout(A)

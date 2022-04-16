@@ -108,12 +108,9 @@ class DenseNet(TorchModelMixin):
             verbose=True,
             **kwargs
     ):
-       
-        X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
-
         return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
-                         monitor=monitor, lr_scheduler=lr_scheduler,
-                         lr_scheduler_patience=lr_scheduler_patience,
-                         lr_factor=lr_factor,
-                         min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
-                         verbose=verbose, **kwargs)
+                           monitor=monitor, lr_scheduler=lr_scheduler,
+                           lr_scheduler_patience=lr_scheduler_patience,
+                           lr_factor=lr_factor,
+                           min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
+                           verbose=verbose, **kwargs)
