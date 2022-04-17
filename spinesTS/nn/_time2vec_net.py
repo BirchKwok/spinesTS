@@ -36,7 +36,10 @@ class T2V(nn.Module):
         else:
             x = x1
 
-        return self.linear(x.reshape(-1, x.shape[1] * x.shape[2]))
+        if self.in_shape_type == tuple:
+            return self.linear(x.reshape(-1, x.shape[1] * x.shape[2]))
+        else:
+            return self.linear(x)
 
 
 class Time2VecNet(TorchModelMixin):
