@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from spinesTS.layers import RecurseResBlock, TrainableMovingAverage1d
+from spinesTS.layers import RecurseResBlock, TrainableMovingAverage1d, DimensionConv1d
 
 
 class GaussianNoise1d(nn.Module):
@@ -34,16 +34,26 @@ class ResDenseBlock(nn.Module):
 
         self.fc_blocks = nn.ModuleList([
             nn.Sequential(
-                TrainableMovingAverage1d(self.kernel_size, padding='same'),
-                nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            ) for i in range(3)
+                TrainableMovingAverage1d(self.kernel_size, weighted=True, padding='neighbor'),
+                nn.LeakyReLU(negative_slope=0.01, inplace=True)
+            ),
+            nn.Sequential(
+                DimensionConv1d(in_features, in_features, self.kernel_size, padding='same'),
+                nn.LeakyReLU(negative_slope=0.01, inplace=True)
+            ),
+            nn.Sequential(
+                DimensionConv1d(in_features, in_features, self.kernel_size, padding='same'),
+                nn.LeakyReLU(negative_slope=0.01, inplace=True)
+            )
         ])
         self.res_layer_1 = RecurseResBlock(2, trainable=True)
         self.res_layer_2 = RecurseResBlock(3, trainable=True)
-        self.last_res_layer = RecurseResBlock(3, trainable=True)
+        self.last_res_layer = RecurseResBlock(4, trainable=True)
 
     def forward(self, x, init_layer):
         # block 1
+        x_fst = x.clone()
+
         x = self.fc_blocks[0](x)
         x = self.res_layer_1([init_layer, x])
 
@@ -57,7 +67,7 @@ class ResDenseBlock(nn.Module):
 
         # block 3
         x = self.fc_blocks[2](x)
-        x = self.last_res_layer([init_layer, _, x])
+        x = self.last_res_layer([x_fst, init_layer, _, x])
 
         return x
 

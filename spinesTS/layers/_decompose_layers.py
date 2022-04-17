@@ -123,13 +123,16 @@ class TrainableMovingAverage1d(nn.Module):
     torch.Tensor
     """
 
-    def __init__(self, kernel_size, weighted=True, padding='same'):
-        assert padding in ('same', 'valid')
+    def __init__(self, kernel_size, weighted=True, use_bias=True, padding='neighbor'):
+        assert padding in ('neighbor', 'valid')
         super(TrainableMovingAverage1d, self).__init__()
         self.padding = padding
         self.kernel_size = kernel_size
+        self.use_bias = use_bias
         if weighted:
             self.weighted = nn.Parameter(torch.randn(self.kernel_size, 1))
+            if use_bias:
+                self.bias = nn.Parameter(torch.Tensor([0]))
         else:
             self.weighted = None
 
@@ -139,15 +142,37 @@ class TrainableMovingAverage1d(nn.Module):
 
         res = None
 
-        for i in range(cols-self.kernel_size):
+        for i in range(cols - self.kernel_size):
             if self.weighted is not None:
-                _ = x[:, i: i+self.kernel_size] @ self.weighted
+                if self.use_bias:
+                    _ = x[:, i: i + self.kernel_size] @ self.weighted + self.bias
+                else:
+                    _ = x[:, i: i + self.kernel_size] @ self.weighted
             else:
-                _ = torch.mean(x[:, i: i+self.kernel_size], dim=-1, keepdim=True)
+                _ = torch.mean(x[:, i: i + self.kernel_size], dim=-1, keepdim=True)
 
             res = _ if res is None else torch.cat((res, _), dim=-1)
 
-        if self.padding == 'same':
+        if self.padding == 'neighbor':
             return torch.cat((res[:, :self.kernel_size], res), dim=-1)
 
         return res
+
+
+class DimensionConv1d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, **kwargs):
+        super(DimensionConv1d, self).__init__()
+        self.conv1d = nn.Conv1d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            **kwargs
+        )
+
+    def forward(self, x):
+        assert x.ndim == 2
+        return self.conv1d(x.view(x.shape[0], x.shape[1], 1)).squeeze()
+

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from spinesTS.base import TorchModelMixin
-from spinesTS.layers import ResDenseBlock, Hierarchical1d
+from spinesTS.layers import ResDenseBlock, Hierarchical1d, SeriesRecombinationLayer
 
 
 class WeightedEncoder(nn.Module):
@@ -20,7 +20,7 @@ class WeightedEncoder(nn.Module):
         self.padding = nn.ReflectionPad1d((0, 1))
 
         self.lstms = nn.ModuleList([
-            nn.LSTM(self.odd_shape, self.odd_shape), nn.LSTM(self.even_shape, self.even_shape)
+            nn.LSTM(self.odd_shape, self.odd_shape), nn.LSTM(self.even_shape, self.even_shape, proj_size=0)
         ])
 
         if self.RIN:
@@ -81,6 +81,7 @@ class EncoderTree(nn.Module):
         if self.level != 0:
             odd_shape = in_features // 2 + in_features % 2
             even_shape = in_features // 2
+
             self.sub_odd_encoder = WeightedEncoder(odd_shape)
             self.sub_even_encoder = WeightedEncoder(even_shape)
 
@@ -94,7 +95,7 @@ class EncoderTree(nn.Module):
 
 
 class WeightedDenseRNNBase(nn.Module):
-    def __init__(self, in_features, output_features, level=4):
+    def __init__(self, in_features, output_features, level=1):
         super(WeightedDenseRNNBase, self).__init__()
         self.in_features, self.output_features = in_features, output_features
         self.encoder_tree = EncoderTree(in_features, level=level)
@@ -110,9 +111,22 @@ class WeightedDenseRNNBase(nn.Module):
         return self.output_layer(x)
 
 
+class WeightedDenseRNNBase2d(nn.Module):
+    def __init__(self, in_shapes, out_features, mid_dim=128, level=1):
+        super(WeightedDenseRNNBase2d, self).__init__()
+        self.in_shapes, self.in_features = in_shapes, mid_dim
+        self.sampling = SeriesRecombinationLayer(self.in_shapes, out_features=self.in_features)
+
+        self.wdr = WeightedDenseRNNBase(self.in_features, out_features, level)
+
+    def forward(self, x):
+        x = self.sampling(x)
+        return self.wdr(x)
+
+
 class WeightedDenseRNN(TorchModelMixin):
-    """
-    spinesTS MLP pytorch-model
+    """Weighted dense fully connection RNN.
+
 
     """
 
@@ -123,20 +137,28 @@ class WeightedDenseRNN(TorchModelMixin):
             learning_rate=0.0001,
             level=1,
             random_seed=42
-        ):
+    ):
         super(WeightedDenseRNN, self).__init__(random_seed)
 
-        assert in_features > 1, "in_features must be greater than 1."
+        if isinstance(in_features, int):
+            assert in_features > 1, "in_features must be greater than 1."
+        else:
+            assert in_features[0] > 1, "in_features must be greater than 1."
         self.out_features, self.in_features = out_features, in_features
         self.learning_rate = learning_rate
         self.model, self.loss_fn, self.optimizer = None, None, None
 
         self.level = level
 
-        self.model, self.loss_fn, self.optimizer = self.call(self.in_features)
+        self.model, self.loss_fn, self.optimizer = self.call()
 
-    def call(self, in_features):
-        model = WeightedDenseRNNBase(in_features, self.out_features, self.level)
+    def call(self):
+        if isinstance(self.in_features, tuple):
+            model = WeightedDenseRNNBase2d(in_shapes=self.in_features,
+                                           out_features=self.out_features, level=self.level)
+        else:
+            model = WeightedDenseRNNBase(self.in_features, self.out_features, self.level)
+
         loss_fn = nn.HuberLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer
@@ -158,11 +180,9 @@ class WeightedDenseRNN(TorchModelMixin):
             verbose=True,
             **kwargs
     ):
-        X_train, y_train = torch.Tensor(X_train), torch.Tensor(y_train)
-
         return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
-                         monitor=monitor, lr_scheduler=lr_scheduler,
-                         lr_scheduler_patience=lr_scheduler_patience,
-                         lr_factor=lr_factor,
-                         min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
-                         verbose=verbose, **kwargs)
+                           monitor=monitor, lr_scheduler=lr_scheduler,
+                           lr_scheduler_patience=lr_scheduler_patience,
+                           lr_factor=lr_factor,
+                           min_delta=min_delta, patience=patience, restore_best_weights=restore_best_weights,
+                           verbose=verbose, **kwargs)

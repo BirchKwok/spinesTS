@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from spinesTS.layers import GAU, SamplingLayer
+from spinesTS.layers import GAU, SeriesRecombinationLayer
 from spinesTS.base import TorchModelMixin
 
 
@@ -34,7 +34,7 @@ class GAUBase2d(nn.Module):
     def __init__(self, in_shapes, out_features, mid_dim=128, flip_features=False):
         super(GAUBase2d, self).__init__()
         self.in_shapes, self.in_features = in_shapes, mid_dim
-        self.sampling = SamplingLayer(self.in_shapes, out_features=self.in_features)
+        self.sampling = SeriesRecombinationLayer(self.in_shapes, out_features=self.in_features)
         self.gau = GAUBase(self.in_features, out_features, flip_features)
 
     def forward(self, x):
@@ -51,7 +51,7 @@ class GAUNet(TorchModelMixin):
         self.model, self.loss_fn, self.optimizer = self.call()
 
     def call(self):
-        if len(self.in_features) == 2:
+        if isinstance(self.in_features, tuple):
             model = GAUBase2d(self.in_features, self.out_features, flip_features=self.flip_features)
         else:
             model = GAUBase(self.in_features, self.out_features, flip_features=self.flip_features)

@@ -1,10 +1,10 @@
 from torch import nn
 
 
-class SamplingLayer(nn.Module):
+class SeriesRecombinationLayer(nn.Module):
     def __init__(self, in_shapes, out_features=128, rnn_layers=1, dropout=0.):
         assert isinstance(in_shapes, tuple) and len(in_shapes) == 2
-        super(SamplingLayer, self).__init__()
+        super(SeriesRecombinationLayer, self).__init__()
         (self.rows, self.cols), self.out_features = in_shapes, out_features
 
         self.encoder_rnn = nn.GRU(self.rows, out_features, batch_first=True, num_layers=rnn_layers,
@@ -23,3 +23,11 @@ class SamplingLayer(nn.Module):
         x = x.permute((0, 2, 1))
 
         return self.out(x.reshape((-1, self.cols * self.out_features)))  # (batch_size, out_features)
+
+
+class TrendSamplingLayer(nn.Module):
+    def __init__(self):
+        super(TrendSamplingLayer, self).__init__()
+
+    def forward(self, x):
+        pass

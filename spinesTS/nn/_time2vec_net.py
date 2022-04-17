@@ -1,45 +1,42 @@
 import torch
 from torch import nn
-from spinesTS.layers import Time2Vec, SamplingLayer
+from spinesTS.layers import Time2Vec
 from spinesTS.base import TorchModelMixin
 
 
 class T2V(nn.Module):
-    def __init__(self, in_features, out_features, flip_features=False):
+    def __init__(self, in_shapes, out_features, flip_features=False):
         super(T2V, self).__init__()
-        self.in_features, self.out_features = in_features, out_features
-        self.t2v = Time2Vec(in_features)
-        if flip_features:
-            self.t2v2 = Time2Vec(in_features)
-            ln_layer_in_fea = 4 * in_features
+        self.in_shape_type = type(in_shapes)
+        if self.in_shape_type == tuple:
+            rows, self.in_features = in_shapes
         else:
-            ln_layer_in_fea = 2 * in_features
+            self.in_features, self.out_features = in_shapes, out_features
 
-        self.linear = nn.Linear(ln_layer_in_fea, out_features)
+        self.t2v = Time2Vec(self.in_features)
+        if flip_features:
+            self.t2v2 = Time2Vec(self.in_features)
+            ln_layer_in_fea = 4 * self.in_features
+        else:
+            ln_layer_in_fea = 2 * self.in_features
+
+        if self.in_shape_type == tuple:
+            self.linear = nn.Linear(ln_layer_in_fea * rows, out_features)
+        else:
+            self.linear = nn.Linear(ln_layer_in_fea, out_features)
+
         self.flip_features = flip_features
 
     def forward(self, x):
         x1 = self.t2v(x)
         if self.flip_features:
             _x = x.clone()
-            x2 = self.t2v2(torch.flip(_x, dims=[1]))
+            x2 = self.t2v2(torch.flip(_x, dims=[-1]))
             x = torch.concat((x1, x2), dim=-1)
         else:
             x = x1
 
-        return self.linear(x)
-
-
-class T2V2d(nn.Module):
-    def __init__(self, in_shapes, out_features, mid_dim=128, flip_features=False):
-        super(T2V2d, self).__init__()
-        self.in_shapes, self.in_features = in_shapes, mid_dim
-        self.sampling = SamplingLayer(self.in_shapes, out_features=self.in_features)
-        self.t2v = T2V(self.in_features, out_features, flip_features)
-
-    def forward(self, x):
-        x = self.sampling(x)
-        return self.t2v(x)
+        return self.linear(x.reshape(-1, x.shape[1] * x.shape[2]))
 
 
 class Time2VecNet(TorchModelMixin):
@@ -51,10 +48,7 @@ class Time2VecNet(TorchModelMixin):
         self.model, self.loss_fn, self.optimizer = self.call()
 
     def call(self):
-        if len(self.in_features) == 2:
-            model = T2V2d(self.in_features, self.out_features, flip_features=self.flip_features)
-        else:
-            model = T2V(self.in_features, self.out_features, flip_features=self.flip_features)
+        model = T2V(self.in_features, self.out_features, flip_features=self.flip_features)
         loss_fn = nn.HuberLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer
