@@ -76,44 +76,11 @@ class TorchModelMixin:
 
     """
 
-    def __init__(self, seed=None, device=None, scaler='MinMaxScaler') -> None:
+    def __init__(self, seed=None, device=None) -> None:
         seed_everything(seed)
         self.device = DEVICE(device)
-        self.model, sc = None, None
-        if scaler == 'StandardScaler':
-            from sklearn.preprocessing import StandardScaler
-            sc = StandardScaler()
-        elif scaler == 'Normalizer':
-            from sklearn.preprocessing import Normalizer
-            sc = Normalizer()
-        elif scaler == 'MaxAbsScaler':
-            from sklearn.preprocessing import MaxAbsScaler
-            sc == MaxAbsScaler()
-        elif scaler == 'RobustScaler':
-            from sklearn.preprocessing import RobustScaler
-            sc == RobustScaler()
-        elif scaler == 'GaussRankScaler':
-            from spinesTS.preprocessing import GaussRankScaler
-            sc = GaussRankScaler()
-        elif scaler == 'MinMaxScaler':
-            from sklearn.preprocessing import MinMaxScaler
-            sc == MinMaxScaler()
-        elif type(scaler) == str:
-            raise KeyError(f"{scaler} is invalid.")
-        else:
-            if not (hasattr(scaler, 'fit_transform')  and hasattr(scaler, "transform")):
-                raise AttributeError(f"scaler must have fit_transform and transform attributes.")
+        self.model = None
 
-        self.scaler = sc or MinMaxScaler()
-    
-    def _fit_scaler_shape(self, x, op_name='fit_transform'):
-        if x.ndim == 3:
-            x_shape = x.shape
-            _ = x.view((-1, x_shape[-1]))
-            x = torch.Tensor(eval(f"self.scaler.{op_name}(_)"))
-            return x.view(x_shape)
-        else:
-            return torch.Tensor(eval(f"self.scaler.{op_name}(x)"))
 
     def call(self, *args, **kwargs):
         """To implement the model architecture.
@@ -347,13 +314,11 @@ class TorchModelMixin:
 
         # preprocess block
         X, y = self._check_X_y_type(X, y)
-        X = self._fit_scaler_shape(X, 'fit_transform')
         self._get_batch_size(X, batch_size=batch_size)
         train_data = TensorDataset(X, y)
         train_loader = DataLoader(train_data, batch_size=self._batch_size, shuffle=False)
         if eval_set is not None:
             X_t, y_t = self._check_X_y_type(eval_set[0], eval_set[1])
-            X_t = self._fit_scaler_shape(X_t, 'transform')
             test_data = TensorDataset(X_t, y_t)
             test_loader = DataLoader(test_data, batch_size=self._batch_size, shuffle=False)
         
@@ -435,4 +400,3 @@ class TorchModelMixin:
         assert self.model is not None, "model must be not None."
         if self.model is not None:
             torch_summary(self.model, input_shape=(self.in_features,))
-
