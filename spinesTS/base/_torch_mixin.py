@@ -107,12 +107,13 @@ class TorchModelMixin:
         self.scaler = sc or MinMaxScaler()
     
     def _fit_scaler_shape(self, x, op_name='fit_transform'):
-        assert x.ndim == 3
-
-        x_shape = x.shape
-        _ = x.view((-1, x_shape[-1]))
-        x = torch.Tensor(eval(f"self.scaler.{op_name}(_)"))
-        return x.view(x_shape)
+        if x.ndim == 3:
+            x_shape = x.shape
+            _ = x.view((-1, x_shape[-1]))
+            x = torch.Tensor(eval(f"self.scaler.{op_name}(_)"))
+            return x.view(x_shape)
+        else:
+            return torch.Tensor(eval(f"self.scaler.{op_name}(x)"))
 
     def call(self, *args, **kwargs):
         """To implement the model architecture.
@@ -225,7 +226,7 @@ class TorchModelMixin:
         else:
             y = torch.Tensor(y)
 
-        return X.type(torch.float32), y.type(torch.float32)
+        return X.float(), y.float()
 
     def train(
             self,
