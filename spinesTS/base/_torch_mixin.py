@@ -85,7 +85,7 @@ class TorchModelMixin:
         """To implement the model architecture.
         
         """
-        raise NotImplementedError("To implement a spinesTS.nn model class, you must be implement a call function.")
+        raise NotImplementedError("To implement a spinesTS.nn model class, you must implement a call function.")
 
     def fit(self, 
             X,
