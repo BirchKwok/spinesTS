@@ -3,19 +3,206 @@ import time
 import numpy as np
 import torch
 from torch import nn
-
+from torch.utils.data import TensorDataset, DataLoader
 from spinesTS.metrics import mean_absolute_error
-from spinesTS.utils import torch_summary
+from spinesTS.utils import torch_summary, seed_everything
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+def DEVICE(device=None):
+    """Set device
+    
+    Parameters
+    ----------
+    device : None or str, default to cuda(if torch.cuda.is_available() is True and only one gpu on the machine), 
+        if multi gpu on the machine, default to cuda:0, else, default to cpu
+    
+    Returns
+    -------
+    device, after setting.
+    
+    """
+    if device is None:
+        if torch.cuda.is_available():
+            device = 'cuda:0' if torch.cuda.device_count() > 1 else 'cuda'
+        else:
+            device = 'cpu'
+
+    return device
 
 
 class TorchModelMixin:
+    """Provide pytorch models common mixin class.
+
+    This class make it easy to write code like this:
+        ```python
+        class Model(TorchModelMixin):
+            def __init__(self, *args, **kwargs):
+                # need to set random seed if you needed
+                # need to set device which to put your tensor, default to cuda/cuda:0 if your gpu is available, else to cpu
+                super(Model, self).__init__(seed=None, device=None)  
+
+                self.model, self.loss_fn, self.optimizer = self.call()  # implement your model architecture
+
+            def call(self):
+                # model = your_model_class()
+                # loss_fn = your_loss_function()
+                # optimizer = your_optimizer_function()
+                # return model, loss_fn, optimizer
+                pass
+
+            def fit(self, X, y, *args, **kwargs):
+                return super().fit(X, y, *args, **kwargs)
+
+            # def metric(self, y_true, y_pred):
+                 # your metric, default to mae(mean absolute error)
+                 # if you want to use other metrics, you need to override this function
+
+        # To fit something
+        model = Model(args, kwargs)
+        model.fit(X, y)
+
+        # To predict something
+        y_pred = model.predict(X)
+        ```
+
+    Parameters
+    ----------
+    seed : int or None, random seed
+    device : str or None, device name 
+
+    Returns
+    -------
+    None
+
     """
-    pytorch model common mixin class
-    """
-    def move_to_device(self, obj, d=device):
-        obj = obj.to(d)
+
+    def __init__(self, seed=None, device=None, scaler='MinMaxScaler') -> None:
+        seed_everything(seed)
+        self.device = DEVICE(device)
+        self.model, sc = None, None
+        if scaler == 'StandardScaler':
+            from sklearn.preprocessing import StandardScaler
+            sc = StandardScaler()
+        elif scaler == 'Normalizer':
+            from sklearn.preprocessing import Normalizer
+            sc = Normalizer()
+        elif scaler == 'MaxAbsScaler':
+            from sklearn.preprocessing import MaxAbsScaler
+            sc == MaxAbsScaler()
+        elif scaler == 'RobustScaler':
+            from sklearn.preprocessing import RobustScaler
+            sc == RobustScaler()
+        elif scaler == 'GaussRankScaler':
+            from spinesTS.preprocessing import GaussRankScaler
+            sc = GaussRankScaler()
+        elif scaler == 'MinMaxScaler':
+            from sklearn.preprocessing import MinMaxScaler
+            sc == MinMaxScaler()
+        elif type(scaler) == str:
+            raise KeyError(f"{scaler} is invalid.")
+        else:
+            if not (hasattr(scaler, 'fit_transform')  and hasattr(scaler, "transform")):
+                raise AttributeError(f"scaler must have fit_transform and transform attributes.")
+
+        self.scaler = sc or MinMaxScaler()
+    
+    def _fit_scaler_shape(self, x, op_name='fit_transform'):
+        assert x.ndim == 3
+
+        x_shape = x.shape
+        _ = x.view((-1, x_shape[-1]))
+        x = torch.Tensor(eval(f"self.scaler.{op_name}(_)"))
+        return x.view(x_shape)
+
+    def call(self, *args, **kwargs):
+        """To implement the model architecture.
+        
+        """
+        raise NotImplementedError("To implement a spinesTS.nn model class, you must implement a call function.")
+
+    def fit(self, 
+            X,
+            y,
+            epochs=1000,
+            batch_size='auto',
+            eval_set=None,
+            loss_type='down',
+            metrics_name='score',
+            monitor='val_loss',
+            min_delta=0,
+            patience=10,
+            lr_scheduler='ReduceLROnPlateau',
+            lr_scheduler_patience=10,
+            lr_factor=0.1,
+            restore_best_weights=True,
+            verbose=True,
+            **lr_scheduler_kwargs
+            ):
+        """Fit your model.
+
+        Parameters
+        ----------
+        X : torch.Tensor, training features
+        y : torch.Tensor, training targets
+        epochs : int, training epochs, default to 1000
+        batch_size : str or int, 'auto' means to autofit, int means to specify the batch size
+        eval_set : iterable object(tuple or list) of torch.Tensor, default to None
+        loss_type : str, 'down' or 'rise', only be used if lr_scheduler='ReduceLROnPlateau'
+            it means the way to set the learning rate scheduler to watch the loss value (down or rise)
+        metrics_name : str, names your metrics, default to 'score'
+        monitor : str, 'val_loss' or 'loss', quantity to be monitored,
+        min_delta : minimum change in the monitored quantity to qualify as an improvement, 
+            i.e. an absolute change of less than min_delta, will count as no improvement, default to 0
+        patience : number of epochs with no improvement after which training will be stopped, default to 10
+        lr_scheduler : learning rate scheduler name, one of ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
+        lr_scheduler_patience :  number of epochs with no improvement after which learning rate will be reduced. 
+            For example, if patience = 2, then we will ignore the first 2 epochs with no improvement, and will only decrease the LR after the 3rd epoch 
+            if the loss still hasn’t improved then, default: 10
+        lr_factor : factor by which the learning rate will be reduced. new_lr = lr * factor. Default: 0.1
+        restore_best_weights : Whether to restore model weights from the epoch with the best value of the monitored quantity. 
+            If False, the model weights obtained at the last step of training are used. 
+            If True, and if no epoch improves, training will run for patience epochs and restore weights from the best epoch in that set. Default to True.
+        verbose : Whether to  displays messages, default to True
+        **lr_scheduler_kwargs : torch.optim.lr_scheduler parameters
+
+        Returns
+        -------
+        self
+
+        """
+        return self._fit(
+            X,
+            y,
+            epochs=epochs,
+            batch_size=batch_size,
+            eval_set=eval_set,
+            loss_type=loss_type,
+            metrics_name=metrics_name,
+            monitor=monitor,
+            min_delta=min_delta,
+            patience=patience,
+            lr_scheduler=lr_scheduler,
+            lr_scheduler_patience=lr_scheduler_patience,
+            lr_factor=lr_factor,
+            restore_best_weights=restore_best_weights,
+            verbose=verbose,
+            **lr_scheduler_kwargs
+            )
+
+    def predict(self, X):
+        """
+        X : torch.Tensor, tensor which to predict
+        """
+        assert self.model is not None, "model not fitted yet."
+        self.model.eval()
+        with torch.no_grad():
+            X = torch.Tensor(X)
+            X = self._move_to_device(X)
+            pred = self.model(X)
+        return pred.cpu().numpy()
+
+    def _move_to_device(self, obj):
+        obj = obj.to(self.device)
         return obj
 
     def metric(self, y_true, y_pred):
@@ -23,66 +210,82 @@ class TorchModelMixin:
 
     def _get_batch_size(self, x, batch_size='auto'):
         if batch_size == 'auto':
-            self._batch_size = 32 if len(x) < 800 else len(x) // 40
+            self._batch_size = 32 if len(x) < 10000 else 64
         else:
             assert isinstance(batch_size, int) and batch_size > 0
             self._batch_size = batch_size
 
-    def train(self, X, y, model, loss_fn, optimizer, batch_size):
-        train_size = len(X)
-        train_num_batches = int(np.ceil(train_size / batch_size))
+    def _check_X_y_type(self, X, y):
+        if isinstance(X, np.ndarray):
+            X = torch.from_numpy(X)
+        else:
+            X = torch.Tensor(X)
+        if isinstance(y, np.ndarray):
+            y = torch.from_numpy(y)
+        else:
+            y = torch.Tensor(y)
 
-        model.train()  # 将模型设置为训练模式
+        return X.type(torch.float32), y.type(torch.float32)
 
-        train_batch = 0
+    def train(
+            self,
+            train_loader,
+            model,
+            loss_fn,
+            optimizer
+        ):
+
+        model.train()  # set model to training mode
+        train_batch = len(train_loader)
         train_loss_current, train_acc = 0, 0
-        for i in range(train_num_batches):
-            x_train = X[train_batch * batch_size: (train_batch + 1) * batch_size]
-            y_train = y[train_batch * batch_size: (train_batch + 1) * batch_size]
-            x_train, y_train = x_train.to(device), y_train.to(device)
+        for batch_ndx, (x, y) in enumerate(train_loader):
+            x_, y_ = x.to(self.device), y.to(self.device)
 
-            # 计算预测误差
-            train_pred = model(x_train)
-            train_loss = loss_fn(train_pred, y_train)
+            # compute error
+            train_pred = model(x_)
+            train_loss = loss_fn(train_pred, y_)
 
-            # 反向传播
-            optimizer.zero_grad()  # 先将优化器中的累计梯度置空
+            # backward
+            optimizer.zero_grad()  # clear optimizer gradient
             train_loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.)
-            optimizer.step()  # 对当前步骤执行优化
 
-            train_acc += self.metric(y_train.detach().cpu().numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
+            optimizer.step()
+
+            train_acc += self.metric(y.numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
             train_loss_current = train_loss.item()
-
-            train_batch += 1
 
         return train_loss_current, train_acc / train_batch
 
-    def test(self, X, y, model, loss_fn, batch_size):
-        X_t, y_t = torch.Tensor(X), torch.Tensor(y)
-        test_size = len(X_t)
-        model.eval()  # 将模型设置为预测模式
-
-        test_loss, test_acc, test_num_batches = 0, 0, int(np.ceil(test_size / batch_size))
-        with torch.no_grad():  # 测试环节不用计算梯度，减少计算量
-            test_batch = 0
-            for i in range(test_num_batches):
-                x_test = X_t[test_batch * batch_size: (test_batch + 1) * batch_size]
-                y_test = y_t[test_batch * batch_size: (test_batch + 1) * batch_size]
-                x_test, y_test = x_test.to(device), y_test.to(device)
-                pred = model(x_test)
-                test_loss += loss_fn(pred, y_test).item()  # 返回一个标量，表示在测试集上的损失
-                # 返回一个标量，表示在测试集上的准确与否
-                test_acc += self.metric(y_test.cpu().numpy(), np.squeeze(pred.cpu().numpy()))
-                test_batch += 1
+    def test(
+            self,
+            test_loader,
+            model,
+            loss_fn
+        ):
+        model.eval()  # set model to evaluate mode
+        test_loss, test_acc, test_num_batches = 0, 0, len(test_loader)
+        with torch.no_grad():  # with no gradient
+            for batch_ndx, (x_, y_) in enumerate(test_loader):
+                x_, y_ = x_.to(self.device), y_.to(self.device)
+                pred = model(x_)
+                test_loss += loss_fn(pred, y_).item()  # scalar
+                # scalar
+                test_acc += self.metric(y_.cpu().numpy(), np.squeeze(pred.cpu().numpy()))
 
         test_loss /= test_num_batches
         test_acc /= test_num_batches
 
         return test_loss, test_acc
 
-    def _early_stopping(self, loss, loss_type='down', min_delta=0, patience=10,
-                        restore_best_weights=True):
+    def _early_stopping(
+            self,
+            loss,
+            loss_type='down',
+            min_delta=0,
+            patience=10,
+            restore_best_weights=True
+    ):
         """
         loss type : rise or down
         """
@@ -106,9 +309,29 @@ class TorchModelMixin:
 
         return False
 
-    def _fit(self, X, y, epochs=1000, batch_size='auto', eval_set=None,
-             loss_type='down', metrics_name='score', monitor='val_loss', min_delta=0, patience=10,
-             restore_best_weights=True, verbose=True):
+    def _fit(
+            self,
+            X,
+            y,
+            epochs=1000,
+            batch_size='auto',
+            eval_set=None,
+            loss_type='down',
+            metrics_name='score',
+            monitor='val_loss',
+            min_delta=0,
+            patience=10,
+            lr_scheduler='ReduceLROnPlateau',
+            lr_scheduler_patience=10,
+            lr_factor=0.1,
+            restore_best_weights=True,
+            verbose=True,
+            **lr_scheduler_kwargs
+    ):
+        """
+        lr_Sceduler: torch.optim.lr_scheduler class, 
+            only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
+        """
 
         assert eval_set is None or isinstance(eval_set, (list, tuple))
         assert monitor in ('loss', 'val_loss', None)
@@ -118,16 +341,40 @@ class TorchModelMixin:
         elif isinstance(eval_set, list):
             assert len(eval_set[0]) == 2
             eval_set = eval_set[0]
+        
+        self.model = self._move_to_device(self.model)
 
-        self.model = self.move_to_device(self.model)
-        X, y = torch.Tensor(X), torch.Tensor(y)
-
+        # preprocess block
+        X, y = self._check_X_y_type(X, y)
+        X = self._fit_scaler_shape(X, 'fit_transform')
         self._get_batch_size(X, batch_size=batch_size)
+        train_data = TensorDataset(X, y)
+        train_loader = DataLoader(train_data, batch_size=self._batch_size, shuffle=False)
+        if eval_set is not None:
+            X_t, y_t = self._check_X_y_type(eval_set[0], eval_set[1])
+            X_t = self._fit_scaler_shape(X_t, 'transform')
+            test_data = TensorDataset(X_t, y_t)
+            test_loader = DataLoader(test_data, batch_size=self._batch_size, shuffle=False)
+        
 
         self.current_patience = 0
         self.current_loss = np.finfo(np.float64).max - min_delta
         self.best_weight = copy.deepcopy(self.model.state_dict())
         batches = int(np.ceil(len(X) / self._batch_size))
+
+        if lr_scheduler == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
+                                                                   mode='min' if loss_type == 'down' else 'max',
+                                                                   patience=lr_scheduler_patience, factor=lr_factor, **lr_scheduler_kwargs)
+        elif lr_scheduler == 'CosineAnnealingLR':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=5, eta_min=0, **lr_scheduler_kwargs)
+        elif lr_scheduler == 'CosineAnnealingWarmRestarts':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=5,T_mult=2, **lr_scheduler_kwargs)
+        elif lr_scheduler is None:
+            pass
+        else:
+            raise KeyError(f"{lr_scheduler} is invalid.")
+
         for epoch in range(epochs):
             tik = time.time()
             stop_state = False
@@ -135,8 +382,15 @@ class TorchModelMixin:
             metric_string = f"Epoch {epoch + 1:>1d}/{epochs:>1d} \n " \
                             f"\r{batches}/{batches} -"
 
-            train_loss_current, train_acc = self.train(X, y, model=self.model, loss_fn=self.loss_fn,
-                                                       optimizer=self.optimizer, batch_size=self._batch_size)
+            train_loss_current, train_acc = self.train(train_loader, model=self.model, loss_fn=self.loss_fn,
+                                                       optimizer=self.optimizer)
+
+            if lr_scheduler:
+                last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
+                scheduler.step() if lr_scheduler != 'ReduceLROnPlateau' else scheduler.step(train_loss_current)
+                if last_lr != self.optimizer.state_dict()['param_groups'][0]['lr']:
+                    last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
+                    metric_string += f" [*lr: {last_lr:>8}] -" if len(str(last_lr)) <= 8 else f" [*lr: {last_lr:>8}] -\n"
 
             metric_string += f" loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f} -"
 
@@ -146,8 +400,7 @@ class TorchModelMixin:
                                                   restore_best_weights=restore_best_weights)
             else:
                 if eval_set is not None:
-                    X_t, y_t = torch.Tensor(eval_set[0]), torch.Tensor(eval_set[1])
-                    test_loss, test_acc = self.test(X_t, y_t, self.model, self.loss_fn, self._batch_size)
+                    test_loss, test_acc = self.test(test_loader, self.model, self.loss_fn)
                     stop_state = self._early_stopping(test_loss, loss_type=loss_type, min_delta=min_delta,
                                                       patience=patience, restore_best_weights=restore_best_weights)
 
@@ -168,19 +421,11 @@ class TorchModelMixin:
 
         return self
 
-    def _predict(self, X):
-        self.model.eval()
-        with torch.no_grad():
-            X = torch.Tensor(X)
-            X = self.move_to_device(X)
-            pred = self.model(X)
-        return pred.cpu().numpy()
-
     def score(self, X, y):
         self.model.eval()
         with torch.no_grad():
             X, y = torch.Tensor(X), torch.Tensor(y)
-            X_cuda, y_cuda = self.move_to_device(X), self.move_to_device(y)
+            X_cuda, _ = self._move_to_device(X), self._move_to_device(y)
             pred = self.model(X_cuda).cpu().numpy()
 
         return self.metric(y, pred)
@@ -188,4 +433,5 @@ class TorchModelMixin:
     def summary(self):
         assert self.model is not None, "model must be not None."
         if self.model is not None:
-            torch_summary(self.model, input_shape=(self.in_features, ))
+            torch_summary(self.model, input_shape=(self.in_features,))
+
