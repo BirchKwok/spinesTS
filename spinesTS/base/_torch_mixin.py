@@ -41,7 +41,7 @@ class TorchModelMixin:
                 # need to set device which to put your tensor, default to cuda/cuda:0 if your gpu is available, else to cpu
                 super(Model, self).__init__(seed=None, device=None)  
 
-                self.call()  # implement your model architecture
+                self.model, self.loss_fn, self.optimizer = self.call()  # implement your model architecture
 
             def call(self):
                 # model = your_model_class()
