@@ -12,13 +12,12 @@ class GAUBase(nn.Module):
         self.in_features, self.out_features = \
             in_shapes[-1] if self.in_shapes_type == tuple else in_shapes, out_features
 
-        self.gau = nn.ModuleList([
-                GAU(self.in_features) for i in range(level)
-            ])
+        gau = [GAU(self.in_features) for i in range(level)]
+
+        self.gau = nn.Sequential(*gau)
         if flip_features:
-            self.gau2 = nn.ModuleList([
-                GAU(self.in_features) for i in range(level)
-            ])
+            gau2 = [GAU(self.in_features) for i in range(level)]
+            self.gau2 = nn.Sequential(*gau2)
 
             ln_layer_in_fea = \
                 2 * in_shapes[0] * in_shapes[1] if self.in_shapes_type == tuple else 2 * self.in_features
