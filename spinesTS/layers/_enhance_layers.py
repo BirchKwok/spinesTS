@@ -34,7 +34,7 @@ class ResDenseBlock(nn.Module):
 
         self.fc_blocks = nn.ModuleList([
             nn.Sequential(
-                TrainableMovingAverage1d(self.kernel_size, weighted=True, padding='neighbor'),
+                TrainableMovingAverage1d(in_features, self.kernel_size, weighted=True, padding='neighbor'),
                 nn.LeakyReLU(negative_slope=0.01, inplace=True)
             ),
             nn.Sequential(
@@ -105,10 +105,6 @@ class Time2Vec(nn.Module):
 
 
 class GAU(nn.Module):
-    """Base on Transformer Quality in Linear Time(https://arxiv.org/pdf/2202.10447.pdf)
-    
-    """
-
     def __init__(
             self,
             in_features,
@@ -118,7 +114,7 @@ class GAU(nn.Module):
             dropout=0.,
     ):
         super().__init__()
-        hidden_dim = int(expansion_factor * in_features)
+        hidden_dim = int(expansion_factor) * in_features
 
         self.norm = nn.LayerNorm(in_features)
         self.dropout = nn.Dropout(dropout)
@@ -155,12 +151,19 @@ class GAU(nn.Module):
         QK = torch.einsum('... d, h d -> ... h d', Z, self.gamma) + self.beta
         q, k = QK.unbind(dim=-2)
 
-        sim = torch.einsum('i d, j d -> i j', q, k) / seq_len
+        if x.ndim == 2:
+            sim = torch.einsum('i d, j d -> i j', q, k) / seq_len
+        else:
+            sim = torch.einsum('b i d, b j d -> b i j', q, k) / seq_len
 
         A = F.relu(sim) ** 2
         A = self.dropout(A)
 
-        V = torch.einsum('i j, j d -> i d', A, v)
+        if x.ndim == 2:
+            V = torch.einsum('i j, j d -> i d', A, v)
+        else:
+            V = torch.einsum('b i j, b j d -> b i d', A, v)
+
         V = V * gate
 
         out = self.to_out(V)
