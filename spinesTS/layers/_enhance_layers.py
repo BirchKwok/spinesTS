@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from spinesTS.layers import RecurseResBlock, TrainableMovingAverage1d, DimensionConv1d
+from spinesTS.layers import RecurseResBlock, DimensionConv1d
 
 
 class GaussianNoise1d(nn.Module):
