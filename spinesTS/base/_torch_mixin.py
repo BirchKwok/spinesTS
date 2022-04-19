@@ -87,7 +87,7 @@ class TorchModelMixin:
         """
         raise NotImplementedError("To implement a spinesTS.nn model class, you must implement a call function.")
 
-    def fit(self, 
+    def fit(self,
             X,
             y,
             epochs=1000,
@@ -154,7 +154,7 @@ class TorchModelMixin:
             restore_best_weights=restore_best_weights,
             verbose=verbose,
             **lr_scheduler_kwargs
-            )
+        )
 
     def predict(self, X):
         """
@@ -182,15 +182,20 @@ class TorchModelMixin:
             assert isinstance(batch_size, int) and batch_size > 0
             self._batch_size = batch_size
 
-    def _check_X_y_type(self, X, y):
+    @staticmethod
+    def _check_x_y_type(X, y):
         if isinstance(X, np.ndarray):
             X = torch.from_numpy(X)
+        elif not isinstance(X, torch.Tensor):
+            X = torch.Tensor(X)
         if isinstance(y, np.ndarray):
             y = torch.from_numpy(y)
+        elif not isinstance(y, torch.Tensor):
+            y = torch.Tensor(y)
 
         return X, y
 
-    def train(
+    def train_on_one_epoch(
             self,
             X,
             y,
@@ -198,8 +203,11 @@ class TorchModelMixin:
             loss_fn,
             optimizer,
             batch_size
-        ):
-        X, y = self._check_X_y_type(X, y)
+    ):
+        """Training function on one epoch
+        If you want to override it, you just need to return two values,
+        current loss on this epoch, average-accuracy on this epoch
+        """
         train_data = TensorDataset(X, y)
         train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=False)
 
@@ -225,17 +233,20 @@ class TorchModelMixin:
 
         return train_loss_current, train_acc / train_batch
 
-    def test(
+    def test_on_one_epoch(
             self,
-            X,
-            y,
+            X_t,
+            y_t,
             model,
             loss_fn,
             batch_size
-        ):
-        X_t, y_t = self._check_X_y_type(X, y)
-        # X_t, y_t = torch.Tensor(X), torch.Tensor(y)
+    ):
+        """
+        Test function on one epoch
+        If you want to override it, you just need to return two values,
+        current loss on this epoch, average-accuracy on this epoch
 
+        """
         test_data = TensorDataset(X_t, y_t)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
@@ -305,7 +316,7 @@ class TorchModelMixin:
             **lr_scheduler_kwargs
     ):
         """
-        lr_Sceduler: torch.optim.lr_scheduler class, 
+        lr_scheduler: torch.optim.lr_scheduler class,
             only support to ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
         """
 
@@ -319,7 +330,7 @@ class TorchModelMixin:
             eval_set = eval_set[0]
 
         self.model = self._move_to_device(self.model)
-        X, y = torch.Tensor(X), torch.Tensor(y)
+        X, y = self._check_x_y_type(X, y)
 
         self._get_batch_size(X, batch_size=batch_size)
 
@@ -329,13 +340,17 @@ class TorchModelMixin:
         batches = int(np.ceil(len(X) / self._batch_size))
 
         if lr_scheduler == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
-                                                                   mode='min' if loss_type == 'down' else 'max',
-                                                                   patience=lr_scheduler_patience, factor=lr_factor, **lr_scheduler_kwargs)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer,
+                mode='min' if loss_type == 'down' else 'max',
+                patience=lr_scheduler_patience, factor=lr_factor, **lr_scheduler_kwargs
+            )
         elif lr_scheduler == 'CosineAnnealingLR':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=5, eta_min=0, **lr_scheduler_kwargs)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=5, eta_min=0,
+                                                                   **lr_scheduler_kwargs)
         elif lr_scheduler == 'CosineAnnealingWarmRestarts':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=5,T_mult=2, **lr_scheduler_kwargs)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=5, T_mult=2,
+                                                                             **lr_scheduler_kwargs)
         elif lr_scheduler is None:
             pass
         else:
@@ -348,15 +363,18 @@ class TorchModelMixin:
             metric_string = f"Epoch {epoch + 1:>1d}/{epochs:>1d} \n " \
                             f"\r{batches}/{batches} -"
 
-            train_loss_current, train_acc = self.train(X, y, model=self.model, loss_fn=self.loss_fn,
-                                                       optimizer=self.optimizer, batch_size=self._batch_size)
+            train_loss_current, train_acc = self.train_on_one_epoch(X, y, model=self.model, loss_fn=self.loss_fn,
+                                                                    optimizer=self.optimizer,
+                                                                    batch_size=self._batch_size)
 
             if lr_scheduler:
                 last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
                 scheduler.step() if lr_scheduler != 'ReduceLROnPlateau' else scheduler.step(train_loss_current)
+
                 if last_lr != self.optimizer.state_dict()['param_groups'][0]['lr']:
                     last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
-                    metric_string += f" [*lr: {last_lr:>8}] -" if len(str(last_lr)) <= 8 else f" [*lr: {last_lr:>8}] -\n"
+                    metric_string += f" [*lr: {last_lr:>8}] -" if len(
+                        str(last_lr)) <= 8 else f" [*lr: {last_lr:>8}] -\n"
 
             metric_string += f" loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f} -"
 
@@ -366,8 +384,9 @@ class TorchModelMixin:
                                                   restore_best_weights=restore_best_weights)
             else:
                 if eval_set is not None:
-                    X_t, y_t = torch.Tensor(eval_set[0]), torch.Tensor(eval_set[1])
-                    test_loss, test_acc = self.test(X_t, y_t, self.model, self.loss_fn, self._batch_size)
+                    X_t, y_t = self._check_x_y_type(eval_set[0], eval_set[1])
+
+                    test_loss, test_acc = self.test_on_one_epoch(X_t, y_t, self.model, self.loss_fn, self._batch_size)
                     stop_state = self._early_stopping(test_loss, loss_type=loss_type, min_delta=min_delta,
                                                       patience=patience, restore_best_weights=restore_best_weights)
 
