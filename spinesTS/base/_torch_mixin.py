@@ -193,7 +193,7 @@ class TorchModelMixin:
         elif not isinstance(y, torch.Tensor):
             y = torch.Tensor(y)
 
-        return X, y
+        return X.float(), y.float()
 
     def train_on_one_epoch(
             self,
