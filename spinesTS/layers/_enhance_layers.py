@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from spinesTS.layers import RecurseResBlock, DimensionConv1d
 
 
 class GaussianNoise1d(nn.Module):
@@ -23,53 +22,6 @@ class GaussianNoise1d(nn.Module):
 
     def forward(self, x):
         return x + torch.mul(torch.randn_like(x, device=x.device), 1 / torch.median(x) * self.level)
-
-
-class ResDenseBlock(nn.Module):
-    def __init__(self, in_features, kernel_size=3, dilation=3):
-        super(ResDenseBlock, self).__init__()
-        self.kernel_size = kernel_size
-        self.in_features = in_features
-        self.dilation = dilation
-
-        self.fc_blocks = nn.ModuleList([
-            nn.Sequential(
-                TrainableMovingAverage1d(in_features, self.kernel_size, weighted=True, padding='neighbor'),
-                nn.LeakyReLU(negative_slope=0.01, inplace=True)
-            ),
-            nn.Sequential(
-                DimensionConv1d(in_features, in_features, self.kernel_size, padding='same'),
-                nn.LeakyReLU(negative_slope=0.01, inplace=True)
-            ),
-            nn.Sequential(
-                DimensionConv1d(in_features, in_features, self.kernel_size, padding='same'),
-                nn.LeakyReLU(negative_slope=0.01, inplace=True)
-            )
-        ])
-        self.res_layer_1 = RecurseResBlock(2, trainable=True)
-        self.res_layer_2 = RecurseResBlock(3, trainable=True)
-        self.last_res_layer = RecurseResBlock(4, trainable=True)
-
-    def forward(self, x, init_layer):
-        # block 1
-        x_fst = x.clone()
-
-        x = self.fc_blocks[0](x)
-        x = self.res_layer_1([init_layer, x])
-
-        _ = x.clone()
-
-        # block 2
-        x = self.fc_blocks[1](x)
-        x = self.res_layer_2([init_layer, _, x])
-
-        _ = x.clone()
-
-        # block 3
-        x = self.fc_blocks[2](x)
-        x = self.last_res_layer([x_fst, init_layer, _, x])
-
-        return x
 
 
 class Time2Vec(nn.Module):
@@ -110,10 +62,10 @@ class GAU(nn.Module):
             in_features,
             query_key_dim=128,
             expansion_factor=2.,
-            add_residual=True,
+            skip_connect=True,
             dropout=0.,
     ):
-        super().__init__()
+        super(GAU, self).__init__()
         hidden_dim = int(expansion_factor) * in_features
 
         self.norm = nn.LayerNorm(in_features)
@@ -138,7 +90,7 @@ class GAU(nn.Module):
             nn.Dropout(dropout)
         )
 
-        self.add_residual = add_residual
+        self.add_residual = skip_connect
 
     def forward(self, x):
         seq_len = x.shape[-2]
