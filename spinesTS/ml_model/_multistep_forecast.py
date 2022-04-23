@@ -3,10 +3,10 @@ from joblib import Parallel, delayed
 import copy
 
 from sklearn.multioutput import _MultiOutputEstimator, _fit_estimator
-from sklearn.utils.validation import has_fit_parameter, _check_fit_params
+from sklearn.utils.validation import _check_fit_params
 
 from spinesTS.base import MLModelMixin
-from spinesTS.utils import func_has_params
+from spinesTS.utils import func_has_params, check_is_fitted
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -29,7 +29,7 @@ class MultiStepRegressor(MLModelMixin):
     def __init__(self, estimator):
         self._model = estimator
         self._forward = 1
-        self._fitted = False
+        self.__spinesTS_is_fitted__ = False
 
     def fit(self, x, y, eval_set=None, **kwargs):
         assert np.ndim(y) <= 2
@@ -40,11 +40,11 @@ class MultiStepRegressor(MLModelMixin):
 
         self._model = self._fit(x, _, eval_set=eval_set, **kwargs)
 
-        self._fitted = True
+        self.__spinesTS_is_fitted__ = True
         return self
 
     def predict(self, x, **kwargs):
-        assert self._fitted, "estimator is not fitted yet."
+        check_is_fitted(self)
         assert isinstance(x, np.ndarray)
         res = []
         eval_x = copy.deepcopy(x)
@@ -98,7 +98,7 @@ class MultiOutputRegressor(MLModelMixin, _MultiOutputEstimator):
             Returns a fitted instance.
         """
         if eval_set is not None:
-            if (len(eval_set) == 2 or len(eval_set[0]) == 2):
+            if len(eval_set) == 2 or len(eval_set[0]) == 2:
                 if len(eval_set[0]) == 2:
                     eval_set = eval_set[0]
             else:

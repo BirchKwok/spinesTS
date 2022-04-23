@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 from spinesTS.metrics import mean_absolute_error
-from spinesTS.utils import torch_summary, seed_everything
+from spinesTS.utils import torch_summary, seed_everything, check_is_fitted
 
 
 def DEVICE(device=None):
@@ -79,7 +79,7 @@ class TorchModelMixin:
     def __init__(self, seed=None, device=None) -> None:
         seed_everything(seed)
         self.device = DEVICE(device)
-        self.model = None
+        self.__spinesTS_is_fitted__ = False
 
     def call(self, *args, **kwargs):
         """To implement the model architecture.
@@ -160,7 +160,7 @@ class TorchModelMixin:
         """
         X : torch.Tensor, tensor which to predict
         """
-        assert self.model is not None, "model not fitted yet."
+        check_is_fitted(self)
         self.model.eval()
         with torch.no_grad():
             X = torch.Tensor(X)
@@ -405,6 +405,7 @@ class TorchModelMixin:
             if stop_state:
                 break
 
+        self.__spinesTS_is_fitted__ = True
         return self
 
     def score(self, X, y):
