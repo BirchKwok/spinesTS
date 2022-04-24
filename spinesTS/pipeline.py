@@ -1,13 +1,13 @@
 import copy
+from typing import List
 import numpy as np
-from sklearn.base import RegressorMixin
-from spinesTS.base._base_mixin import EstimatorMixin
+from spinesTS.base import MLModelMixin
 
 
-class Pipeline(RegressorMixin, EstimatorMixin):
+class Pipeline(MLModelMixin):
     """estimators pipeline """
 
-    def __init__(self, steps: [tuple]):
+    def __init__(self, steps: List[tuple]):
         """
         Demo:
             '''python

@@ -1,22 +1,24 @@
-__all__ = ['LoadElectricDataSets',
-           'LoadMessagesSentDataSets',
-           'LoadMessagesSentHourDataSets',
-           'LoadWebSales',
-           'LoadSupermarketIncoming',
-           'DataReader',
-           'BuiltInSeriesData'
-           ]
-
 import re
 import pandas as pd
 import os
-from spinesTS.base._const import DataTS
-
+from tabulate import tabulate
+from spinesTS.base import DataTS
 
 FILE_PATH = os.path.dirname(__file__)
 
 
 def _get_it_name(built_in_func, name):
+    """Wrapper of built-in datasets
+
+    Parameters
+    ----------
+    built_in_func : BuiltInSeriesData class
+    name : dataset's name
+
+    Returns
+    -------
+    wrapped func
+    """
     assert name is not None
 
     def wrap():
@@ -26,6 +28,18 @@ def _get_it_name(built_in_func, name):
 
 
 class DataReader:
+    """Data reader for table-data
+
+    Parameters
+    ----------
+    fp : file path
+    sep : str, file separator
+    **pd_read_csv_kwargs : pandas.read_csv function params
+
+    Returns
+    -------
+    None
+    """
     def __init__(self, fp, sep=',', **pd_read_csv_kwargs):
         self._FILEPATH = os.path.join(FILE_PATH, './built-in-datasets/', fp)
         if not os.path.exists(self._FILEPATH):
@@ -51,17 +65,27 @@ class DataReader:
 
 
 class BuiltInSeriesData:
+    """Load the built-in data
+
+    Parameters
+    ----------
+    print_file_list : bool, whether to print the exists file name list
+
+    Returns
+    -------
+    None
+    """
     def __init__(self, print_file_list=True):
         self.file_list = sorted(os.listdir(os.path.join(FILE_PATH, './built-in-datasets/')))
         if print_file_list:
-            print(
-                "Existing CSV file list: \n",
-                f"\r{'>> ' * 10}\n",
-                '\r    '.join([re.split('\.', self.file_list[i])[0].strip() + '\n' if i != 0
-                           else '\r    ' + re.split('\.', self.file_list[i])[0].strip() + '\n'
-                           for i in range(len(self.file_list))]),
-                f"\r{'<< ' * 10}"
-            )
+            table = []
+            for i in range(len(self.file_list)):
+                _ = []
+                _.append(re.split('\.', self.file_list[i])[0].strip())
+                _.append(', '.join(self[i].dataset.columns.tolist()))
+                table.append(_)
+            print(tabulate(table, headers=["table's name", "table's columns"], showindex="always",
+                    tablefmt="pretty", colalign=("right","left", "left")))
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -77,6 +101,7 @@ class BuiltInSeriesData:
 
     @property
     def names(self):
+        """Returns the built-in series data names-list."""
         return self.file_list
 
 

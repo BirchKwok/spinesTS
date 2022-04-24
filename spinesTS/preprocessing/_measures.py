@@ -4,6 +4,8 @@ from scipy.interpolate import interp1d
 from scipy.special import erf, erfinv
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import FLOAT_DTYPES, check_array, check_is_fitted
+import torch
+from sklearn.preprocessing import MinMaxScaler
 
 
 class GaussRankScaler(BaseEstimator, TransformerMixin):
@@ -116,3 +118,43 @@ class GaussRankScaler(BaseEstimator, TransformerMixin):
         is_unique = np.zeros_like(x, dtype=bool)
         is_unique[np.unique(x, return_index=True)[1]] = True
         return x[is_unique]
+
+
+class MultiDimScaler:
+    def __init__(self):
+        self.scalers = []
+
+    def fit(self, x, scaler=MinMaxScaler):
+        assert x.ndim == 3
+
+        for i in range(x.shape[-1]):
+            self.scalers.append(scaler().fit(x[:, :, i]))
+
+        return self
+
+    def transform(self, x):
+        assert len(self.scalers) == x.shape[-1], "MultiDimScaler not fitted yet."
+
+        for i in range(x.shape[-1]):
+            x[:, :, i] = self.scalers[i].transform(x[:, :, i])
+
+        if isinstance(x, np.ndarray):
+            x = torch.from_numpy(x)
+        elif not isinstance(x, torch.Tensor):
+            x = torch.Tensor(x)
+
+        return x.float()
+
+    def fit_transform(self, x, scaler=MinMaxScaler):
+        return self.fit(x, scaler).transform(x)
+
+    def inverse_transform(self, x):
+        assert len(self.scalers) == x.shape[-1], "MultiDimScaler not fitted yet."
+
+        if isinstance(x, torch.Tensor):
+            x = x.numpy()
+
+        for i in range(x.shape[-1]):
+            x[:, :, i] = self.scalers[i].inverse_transform(x[:, :, i])
+
+        return torch.Tensor(x).float()

@@ -1,12 +1,8 @@
-from ._dense_net import DenseNet1DTFModel
-from ._tcn import TCN1DTFModel
-from ._dense_net_torch import DenseNet1DTorchModel
-from ._1d_conv import OneDimConvTFModel
-from ._mlp_torch import MLPTorchModel
-from ._tf_layers import (
-    BidirectionalTFLayer,
-    AddAxis,
-    TimesNum,
-    Tanh,
-    Squeeze
-)
+__all__ = [
+    'DenseNet', 'Time2VecNet', 'GAUNet'
+]
+
+
+from ._dense_net import DenseNet
+from ._time2vec_net import Time2VecNet
+from ._gau import GAUNet

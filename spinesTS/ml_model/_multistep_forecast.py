@@ -1,31 +1,35 @@
-__all__ = ['MultiStepRegressor', 'MultiOutputRegressor']
-
 import numpy as np
-from sklearn.base import RegressorMixin
 from joblib import Parallel, delayed
 import copy
 
 from sklearn.multioutput import _MultiOutputEstimator, _fit_estimator
-from sklearn.utils.validation import has_fit_parameter, _check_fit_params
+from sklearn.utils.validation import _check_fit_params
 
-from spinesTS.base._base_mixin import EstimatorMixin
-from spinesTS.utils import func_has_params
+from spinesTS.base import MLModelMixin
+from spinesTS.utils import func_has_params, check_is_fitted
 import warnings
 
 warnings.filterwarnings('ignore')
 
 
-class MultiStepRegressor(RegressorMixin, EstimatorMixin):
-    """
-    use the last predict-step value as the last step true value,
-    to predict current step value,
-    and repeat this until it reaches y.shape[1] times.
+class MultiStepRegressor(MLModelMixin):
+    """Use the last predict-step value as the last step true value,
+        to predict current step value,
+        and repeat this until it reaches y.shape[1] times.
+
+    Parameters
+    ----------
+    estimator: model with implement fit and predict function
+
+    Returns
+    -------
+    self : object
     """
 
     def __init__(self, estimator):
         self._model = estimator
         self._forward = 1
-        self._fitted = False
+        self.__spinesTS_is_fitted__ = False
 
     def fit(self, x, y, eval_set=None, **kwargs):
         assert np.ndim(y) <= 2
@@ -36,11 +40,11 @@ class MultiStepRegressor(RegressorMixin, EstimatorMixin):
 
         self._model = self._fit(x, _, eval_set=eval_set, **kwargs)
 
-        self._fitted = True
+        self.__spinesTS_is_fitted__ = True
         return self
 
     def predict(self, x, **kwargs):
-        assert self._fitted, "estimator is not fitted yet."
+        check_is_fitted(self)
         assert isinstance(x, np.ndarray)
         res = []
         eval_x = copy.deepcopy(x)
@@ -55,13 +59,27 @@ class MultiStepRegressor(RegressorMixin, EstimatorMixin):
         return np.squeeze(np.transpose(r))
 
 
-class MultiOutputRegressor(RegressorMixin, _MultiOutputEstimator):
-    """fitting one regressor per target."""
+class MultiOutputRegressor(MLModelMixin, _MultiOutputEstimator):
+    """Fitting one regressor per target.
 
-    def __init__(self, estimator, *, n_jobs=None):
+    Parameters
+    ----------
+    estimator: model with implement fit and predict function
+    n_jobs: None or int, default to None.
+        The number of jobs to run in parallel.
+        ``None`` means 1 unless in a :obj:`joblib.parallel_backend`
+        context. ``-1`` means using all processors.
+
+    Returns
+    -------
+    self : object
+
+    """
+
+    def __init__(self, estimator, n_jobs=None):
         super().__init__(estimator, n_jobs=n_jobs)
 
-    def fit(self, X, y, sample_weight=None, eval_set=None, **fit_params):
+    def fit(self, X, y, eval_set=None, **fit_params):
         """Fit the model to data, separately for each output variable.
         Parameters
         ----------
@@ -70,10 +88,6 @@ class MultiOutputRegressor(RegressorMixin, _MultiOutputEstimator):
         y : {array-like, sparse matrix} of shape (n_samples, n_outputs)
             Multi-output targets. An indicator matrix turns on multilabel
             estimation.
-        sample_weight : array-like of shape (n_samples,), default=None
-            Sample weights. If `None`, then samples are equally weighted.
-            Only supported if the underlying regressor supports sample
-            weights.
         eval_set : tuple of (X, y) , length must be equal to y.shape[1],
             passed to the ``estimator.fit`` method of each step
         **fit_params : dict of string -> object
@@ -84,7 +98,7 @@ class MultiOutputRegressor(RegressorMixin, _MultiOutputEstimator):
             Returns a fitted instance.
         """
         if eval_set is not None:
-            if (len(eval_set) == 2 or len(eval_set[0]) == 2):
+            if len(eval_set) == 2 or len(eval_set[0]) == 2:
                 if len(eval_set[0]) == 2:
                     eval_set = eval_set[0]
             else:
@@ -101,11 +115,6 @@ class MultiOutputRegressor(RegressorMixin, _MultiOutputEstimator):
                 "multi-output regression but has only one."
             )
 
-        if sample_weight is not None and not has_fit_parameter(
-            self.estimator, "sample_weight"
-        ):
-            raise ValueError("Underlying estimator does not support sample weights.")
-
         fit_params_validated = _check_fit_params(X, fit_params)
 
         if func_has_params(self.estimator.fit, "eval_set") and eval_set is not None:
@@ -113,7 +122,7 @@ class MultiOutputRegressor(RegressorMixin, _MultiOutputEstimator):
                 eval_sets_ = [(eval_set[0], eval_set[1][:, i]) for i in range(y.shape[1])]
                 self.estimators_ = Parallel(n_jobs=self.n_jobs)(
                     delayed(_fit_estimator)(
-                        self.estimator, X, y[:, i], sample_weight, eval_set=eval_sets_[i], **fit_params_validated
+                        self.estimator, X, y[:, i], eval_set=eval_sets_[i], **fit_params_validated
                     )
                     for i in range(y.shape[1])
                 )
@@ -121,14 +130,14 @@ class MultiOutputRegressor(RegressorMixin, _MultiOutputEstimator):
                 eval_sets_ = [[(eval_set[0], eval_set[1][:, i])] for i in range(y.shape[1])]
                 self.estimators_ = Parallel(n_jobs=self.n_jobs)(
                     delayed(_fit_estimator)(
-                        self.estimator, X, y[:, i], sample_weight, eval_set=eval_sets_[i], **fit_params_validated
+                        self.estimator, X, y[:, i], eval_set=eval_sets_[i], **fit_params_validated
                     )
                     for i in range(y.shape[1])
                 )
         else:
             self.estimators_ = Parallel(n_jobs=self.n_jobs)(
                 delayed(_fit_estimator)(
-                    self.estimator, X, y[:, i], sample_weight, **fit_params_validated
+                    self.estimator, X, y[:, i], **fit_params_validated
                 )
                 for i in range(y.shape[1])
             )

@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.metrics import r2_score as sk_r2_score
 
 
 def _base_op(y_true, y_pred, func):
@@ -53,5 +54,9 @@ def mean_absolute_percentage_error(y_true, y_pred, ignore_zeros=True):
     res = [j for i in res for j in i if not np.isinf(j)]
 
     return np.mean(res)
+
+
+def r2_score(y_true, y_pred, **kwargs):
+    return sk_r2_score(y_true, y_pred, **kwargs)
 
 

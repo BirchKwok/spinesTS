@@ -1,3 +1,10 @@
-from ._base_mixin import KerasModelMixin, EstimatorMixin
+__all__ = [
+    'MLModelMixin', 'DataTS', 'TorchModelMixin', 'DEVICE'
+]
+
+
+from ._base_mixin import MLModelMixin
 from ._const import DataTS
-from ._torch_mixin import TorchModelMixin
+from ._torch_mixin import TorchModelMixin, DEVICE
+
+
