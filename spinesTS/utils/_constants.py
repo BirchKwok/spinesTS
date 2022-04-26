@@ -25,3 +25,8 @@ def seed_everything(seed=0):
 
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+class FrozenDict(dict):
+    def __setitem__(self, key, value):
+        raise AttributeError("FrozenDict can not be modified.")
