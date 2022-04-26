@@ -1,5 +1,5 @@
 # spinesTS (spines for Time Series)
-spinesTS is a Toolsets for time series.
+spinesTS is a powerful Toolsets for time series.
 ## Install
 ```
 pip install spinesTS
