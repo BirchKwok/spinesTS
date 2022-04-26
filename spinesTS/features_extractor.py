@@ -3,11 +3,21 @@ import pandas as pd
 from scipy import stats
 from joblib import Parallel, delayed
 from sklearn.linear_model import LinearRegression
-from spinesTS.utils import check_is_fitted
+from spinesTS.utils import check_is_fitted, FrozenDict
+from spinesTS.preprocessing import lag_splits
 
 
 class ContinuousFeatureExtractor:
     """Extract features for two dims series.
+
+    Parameters
+    ----------
+    window_size : int or float. The length of the interval around the outlier,
+            if float-type, represents the ratio of the range of each move to the length of each data sample;
+            if integer-type, represents the step size of each move.
+    diff_order : int or list or tuple, the order of difference.
+    drop_init_features : bool, whether to drop the initial features
+    top_k_outlier : int, only take top k outliers
 
     Returns
     -------
@@ -125,9 +135,6 @@ class ContinuousFeatureExtractor:
         Parameters
         ----------
         x : array-like
-        window_size : int or float. The length of the interval around the outlier,
-            if float-type, represents the ratio of the range of each move to the length of each data sample;
-            if integer-type, represents the step size of each move.
 
         Returns
         -------
@@ -175,10 +182,6 @@ class ContinuousFeatureExtractor:
         Parameters
         ----------
         x : array-like
-        window_size : int or float. The length of the interval around the outlier,
-            if float-type, represents the ratio of the range of each move to the length of each data sample;
-            if integer-type, represents the step size of each move.
-        diff_order : int or list or tuple, the order of difference.
 
         Returns
         -------
@@ -189,17 +192,14 @@ class ContinuousFeatureExtractor:
         self.__spinesTS_is_fitted__ = True
         return self
 
-    def fit_transform(self, x, inplace=False):
+    def fit_transform(self, x):
         """
         Fit and extract the features of the inputting matrix.
 
         Parameters
         ----------
         x : array-like
-        window_size : int or float. The length of the interval around the outlier,
-            if float-type, represents the ratio of the range of each move to the length of each data sample;
-            if integer-type, represents the step size of each move.
-        diff_order : int or list or tuple, the order of difference.
+        inplace : Whether to transform x in place or to return a copy.
 
         Returns
         -------
@@ -207,12 +207,10 @@ class ContinuousFeatureExtractor:
         """
         check_is_fitted(self)
         self.fit(x)
-        if inplace:
-            x = self.transform(x)
-        else:
-            return self.transform(x)
 
-    def transform(self, X, inplace=False):
+        return self.transform(x)
+
+    def transform(self, X):
         """Extract the features of the inputting matrix.
 
         Parameters
@@ -225,78 +223,97 @@ class ContinuousFeatureExtractor:
         """
         check_is_fitted(self)
         x = copy.deepcopy(X)
-        if inplace:
-            if self._drop_init_features:
-                X = np.concatenate((self.get_usual_statistical(x), self.get_entropy(x),
-                                    self.get_linearity(x),
-                                    self.get_outlier_statistical(x),
-                                    self.get_difference(x, order=self._diff_order)), axis=-1)
-            else:
-                X = np.concatenate((x, self.get_usual_statistical(x), self.get_entropy(x),
-                                    self.get_linearity(x),
-                                    self.get_outlier_statistical(x),
-                                    self.get_difference(x, order=self._diff_order)), axis=-1)
+
+        if self._drop_init_features:
+            return np.concatenate((self.get_usual_statistical(x), self.get_entropy(x),
+                                   self.get_linearity(x),
+                                   self.get_outlier_statistical(x),
+                                   self.get_difference(x, order=self._diff_order)), axis=-1)
         else:
-            if self._drop_init_features:
-                return np.concatenate((self.get_usual_statistical(x), self.get_entropy(x),
-                                       self.get_linearity(x),
-                                       self.get_outlier_statistical(x),
-                                       self.get_difference(x, order=self._diff_order)), axis=-1)
-            else:
-                return np.concatenate((x, self.get_usual_statistical(x), self.get_entropy(x),
-                                       self.get_linearity(x),
-                                       self.get_outlier_statistical(x),
-                                       self.get_difference(x, order=self._diff_order)), axis=-1)
+            return np.concatenate((x, self.get_usual_statistical(x), self.get_entropy(x),
+                                   self.get_linearity(x),
+                                   self.get_outlier_statistical(x),
+                                   self.get_difference(x, order=self._diff_order)), axis=-1)
 
 
 class TableFeatureExtractor:
+    __columns__: FrozenDict = FrozenDict({'': ''})
+
     def __init__(self,
                  target_col,
-                 n_lags=1,
+                 pred_steps,
+                 n_lags,
                  window_size=0.15,
                  diff_order=1,
                  drop_init_features=False,
                  top_k_outlier=None,
-                 date_col=None,
-                 weighted_cross_features=True,
-                 drop_multicollinearity_cols=True
+                 date_col=None
                  ):
-        self.target_col = target_col
+        self.target_col, self.pred_steps = target_col, pred_steps
         self.date_col = date_col
-        self.weighted_cross_features = weighted_cross_features
         self._n_lags = n_lags
         self._window_size = window_size
 
-        self._drop_multicollinearity_cols = drop_multicollinearity_cols
         self.__spinesTS_is_fitted__ = False
         self.continuous_fe = ContinuousFeatureExtractor(
             window_size=window_size,
             diff_order=diff_order,
             drop_init_features=drop_init_features,
             top_k_outlier=top_k_outlier
-        )
+        ).fit(np.ones((1, 1)))
 
-    def _cross_features(self):
-        pass
+    def _split_target(self, x, window_size, skip_steps=1):
+        return lag_splits(x, window_size=window_size, skip_steps=skip_steps, pred_steps=self.pred_steps)
 
-    def _get_linearity(self):
-        pass
+    def date_features(self, x):
+        x['weekday_1'] = pd.to_datetime(x[self.date_col]).dt.weekday
+        x['day_1'] = pd.to_datetime(x[self.date_col]).dt.day
+        x['week_1'] = pd.to_datetime(x[self.date_col]).dt.week
+        x['month_1'] = pd.to_datetime(x[self.date_col]).dt.month
+        x['weekofyear'] = pd.to_datetime(x[self.date_col]).dt.weekofyear
+        x['quarter_1'] = pd.to_datetime(x[self.date_col]).dt.quarter
 
-    def _multicollinearity_detector(self):
-        pass
+        x['daytomonday'] = abs(pd.to_datetime(x[self.date_col]).dt.weekday - 1)  # 仅考虑当周周一
+        x['daytofriday'] = abs(pd.to_datetime(x[self.date_col]).dt.weekday - 5)  # 仅考虑当周周五
+        x['daytomiddleweek'] = abs(pd.to_datetime(x[self.date_col]).dt.weekday - 3)  # 仅考虑当周周三
 
-    def _get_n_lags(self):
-        pass
+        x['is_weekend'] = pd.to_datetime(x[self.date_col]).apply(lambda s: 0 if s.weekday() not in [6, 7] else 1)
+        x['is_startofwork'] = pd.to_datetime(x[self.date_col]).apply(lambda s: 0 if s.weekday() not in [1, 2] else 1)
+        x['is_endofwork'] = pd.to_datetime(x[self.date_col]).apply(lambda s: 0 if s.weekday() not in [4, 5] else 1)
+        x['is_startofmonth'] = pd.to_datetime(x[self.date_col]).apply(lambda s: 0 if s.day not in [1, 2, 3] else 1)
+        x['is_middleofmonth'] = pd.to_datetime(x[self.date_col]).apply(lambda s: 0 if s.day not in [14, 15, 16] else 1)
+        x['is_endofmonth'] = pd.to_datetime(x[self.date_col]).apply(
+            lambda s: 0 if s.day not in [27, 28, 29, 30, 31] else 1)
+
+        return x
 
     def fit(self, X):
-        assert isinstance(X, (np.ndarray, pd.DataFrame)), \
-            "parameter `X` only accept then pandas.DataFrame or numpy.ndarray. "
+        assert isinstance(X, pd.DataFrame), \
+            "parameter `X` only accept the pandas DataFrame-type data. "
+
         self.__spinesTS_is_fitted__ = True
         return self
 
-    def transform(self, X, inplace=False):
+    def transform(self, X, fillna=False):
         check_is_fitted(self)
-        pass
+        x = X.copy()
+        x = self.date_features(x)
+        # length = len(x) - self._n_lags
+        lag_features = self._split_target(x[self.target_col], window_size=self._n_lags)[:-self._n_lags]
 
-    def fit_transform(self, X, inplace=False):
-        pass
+        _ = self.continuous_fe.transform(lag_features)
+        lag_features = pd.DataFrame(_, columns=[f'{self.target_col}_{i}' for i in range(self._n_lags)] +
+                                               [f'continuous_fe_{i}' for i in range(_.shape[1] - self._n_lags)])
+
+        fillna = fillna if fillna is not False else np.nan
+        _ = pd.DataFrame([[fillna for i in range(lag_features.shape[1])] for j in range(self._n_lags)],
+                         columns=lag_features.columns)
+
+        lag_features = pd.concat((_, lag_features), ignore_index=True, axis=0)
+
+
+        return pd.concat((x, lag_features), axis=1)
+
+    def fit_transform(self, X, fillna=False):
+        self.fit(X)
+        return self.transform(X, fillna=fillna)
