@@ -1,8 +1,5 @@
 from setuptools import Extension, dist, find_packages, setup
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
-
 
 setup(
     name='spinesTS',
@@ -10,7 +7,7 @@ setup(
     description='spinesTS, a powerful timeseries toolsets.',
     keywords='computer vision',
     packages=find_packages(),
-    long_description=long_description,
+    long_description='./README.md',
     classifiers=[
         'License :: OSI Approved :: Apache Software License',
         'Operating System :: OS Independent',
