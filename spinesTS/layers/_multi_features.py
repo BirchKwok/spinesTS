@@ -24,10 +24,3 @@ class SeriesRecombinationLayer(nn.Module):
 
         return self.out(x.reshape((-1, self.cols * self.out_features)))  # (batch_size, out_features)
 
-
-class TrendSamplingLayer(nn.Module):
-    def __init__(self):
-        super(TrendSamplingLayer, self).__init__()
-
-    def forward(self, x):
-        pass
