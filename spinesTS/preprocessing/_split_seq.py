@@ -5,8 +5,22 @@ from functools import partial
 
 
 def split_series(x_seq, y_seq, window_size, pred_steps, train_size=None, shuffle=False, skip_steps=1):
-    """
-    return :
+    """Returns two-dimensional array cut by the specified window size.
+
+    Parameters
+    ---------
+    x_seq : numpy.ndarray or pandas.Series or list, the series which needed to split
+    y_seq : numpy.ndarray or pandas.Series or list, the series which needed to split
+    window_size : int, sliding window size
+    skip_steps : int, the number of skipped steps per slide
+    pred_steps : int, the number of steps predicted forward by the series
+    train_size : float,
+    shuffle : bool, whether to shuffle the split results
+
+    Returns
+    -------
+    numpy.ndarray.
+
     when train_size is not None, return X_train, X_test, y_train, y_test
     otherwise return X, y
     """
@@ -37,12 +51,12 @@ def split_series(x_seq, y_seq, window_size, pred_steps, train_size=None, shuffle
         X.append(seq_x)
         y.append(seq_y)
 
-    if pred_steps == 1 and train_size is None:
+    if train_size is None:
+        if pred_steps > 1:
+            return np.array(X), np.array(y)
         return np.array(X), np.squeeze(np.array(y))
     elif pred_steps == 1 and train_size is not None:
         return train_test_split(np.array(X), np.squeeze(np.array(y)), train_size=train_size, shuffle=shuffle)
-    elif pred_steps > 1 and train_size is None:
-        return np.array(X), np.array(y)
     else:
         return train_test_split(np.array(X), np.array(y), train_size=train_size, shuffle=shuffle)
 
@@ -52,7 +66,7 @@ def lag_splits(x_seq, window_size, skip_steps=1, pred_steps=1):
 
     Parameters
     ---------
-    x_seq : numpy.array or pandas.DataFrame or list, the series which needed to split
+    x_seq : numpy.ndarray or pandas.Series or list, the series which needed to split
     window_size : int, sliding window size
     skip_steps : int, the number of skipped steps per slide
     pred_steps : int, the number of steps predicted forward by the series
@@ -69,12 +83,10 @@ def lag_splits(x_seq, window_size, skip_steps=1, pred_steps=1):
         x_seq = np.array(x_seq)
 
     X = []
-    p = 0
-    _ = 0
+    p, _ = 0, 0
     for i in range(len(x_seq)):
         if p == pred_steps:
-            _ = i
-            p = 1
+            p, _ = 1, i
         else:
             p += 1
         end_index = _ * skip_steps + window_size
@@ -84,7 +96,6 @@ def lag_splits(x_seq, window_size, skip_steps=1, pred_steps=1):
         seq_x = list(x_seq[_ * skip_steps:end_index])
 
         X.append(seq_x)
-
 
     return np.array(X)
 
