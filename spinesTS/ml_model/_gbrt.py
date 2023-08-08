@@ -2,12 +2,13 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMModel
 from sklearn.preprocessing import StandardScaler
+
 from spinesTS.base import MLModelMixin
 from spinesTS.ml_model import MultiOutputRegressor
 from spinesTS.utils import check_is_fitted
 from spinesTS.pipeline import Pipeline
 from spinesTS.preprocessing import split_series
-from spinesTS.features_extractor import ContinuousFeatureExtractor, date_features
+from spinesTS.features_extractor import ContinuousFeatureExtractor
 
 
 def preprocessing_gbrt_with_generate_features(X, input_features, output_features, target_col,
@@ -36,9 +37,6 @@ def preprocessing_gbrt_with_generate_features(X, input_features, output_features
 
     # non-lag features
     _non_lag_fea = X.loc[:, ~X.columns.str.contains(target_col)]
-    if date_col:
-        assert date_col in _non_lag_fea.columns, f"{date_col} not in `X` columns."
-        _non_lag_fea = date_features(_non_lag_fea, date_col, drop_init_features=True)
     _non_lag_fea = _non_lag_fea.values
 
     _tar = X[target_col].values
@@ -118,6 +116,7 @@ class WideGBRT(MLModelMixin):
             ('sc', scaler),
             ('multi_reg', MultiOutputRegressor(LGBMModel(**self.params)))
         ])
+
         multi_reg.fit(X, y, sample_weight=sample_weight, init_score=init_score, group=group
                       , eval_set=eval_set, eval_names=eval_names, eval_sample_weight=eval_sample_weight,
                       eval_class_weight=eval_class_weight, eval_init_score=eval_init_score,

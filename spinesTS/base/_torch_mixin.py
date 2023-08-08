@@ -1,14 +1,17 @@
 import copy
 import time
+from collections import OrderedDict
+
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
+
 from spinesTS.metrics import mean_absolute_error
-from spinesTS.utils import torch_summary, seed_everything, check_is_fitted
+from spinesTS.utils import seed_everything, check_is_fitted
 
 
-def DEVICE(device=None):
+def set_device(device=None):
     """Set device
     
     Parameters
@@ -24,10 +27,20 @@ def DEVICE(device=None):
     if device is None:
         if torch.cuda.is_available():
             device = 'cuda:0' if torch.cuda.device_count() > 1 else 'cuda'
+        elif torch.backends.mps.is_available():
+            device = 'mps'
         else:
             device = 'cpu'
 
+    print(f"Using {device} backend")
+
     return device
+
+
+def get_loss_func(name):
+    assert isinstance(name, str)
+    names = {'huber': nn.HuberLoss(), 'mse': nn.MSELoss(), 'mae': nn.L1Loss()}
+    return names[name]
 
 
 class TorchModelMixin:
@@ -76,9 +89,11 @@ class TorchModelMixin:
 
     """
 
-    def __init__(self, seed=None, device=None) -> None:
+    def __init__(self, seed=None, device=None, loss_fn='mse') -> None:
         seed_everything(seed)
-        self.device = DEVICE(device)
+        self.device = set_device(device)
+        self.loss_fn_name = loss_fn
+        self.loss_fn = get_loss_func(loss_fn)
         self.__spinesTS_is_fitted__ = False
 
     def call(self, *args, **kwargs):
@@ -103,6 +118,7 @@ class TorchModelMixin:
             lr_factor=0.1,
             restore_best_weights=True,
             verbose=True,
+            callbacks=None,
             **lr_scheduler_kwargs
             ):
         """Fit your model.
@@ -137,6 +153,7 @@ class TorchModelMixin:
         self
 
         """
+        # self.model = torch.compile(self.model)  # mac mps or python 3.11 not supported yet
         return self._fit(
             X,
             y,
@@ -153,6 +170,7 @@ class TorchModelMixin:
             lr_factor=lr_factor,
             restore_best_weights=restore_best_weights,
             verbose=verbose,
+            callbacks=callbacks,
             **lr_scheduler_kwargs
         )
 
@@ -195,21 +213,24 @@ class TorchModelMixin:
 
         return X.float(), y.float()
 
+    def data_loader(self, X, y):
+        train_data = TensorDataset(X, y)
+        train_loader = DataLoader(train_data, batch_size=self._batch_size, shuffle=False)
+
+        return train_loader
+
     def train_on_one_epoch(
             self,
-            X,
-            y,
+            dataloader,
             model,
             loss_fn,
-            optimizer,
-            batch_size
+            optimizer
     ):
         """Training function on one epoch
         If you want to override it, you just need to return two values,
         current loss on this epoch, average-accuracy on this epoch
         """
-        train_data = TensorDataset(X, y)
-        train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=False)
+        train_loader = dataloader
 
         model.train()  # set model to training mode
         train_batch = len(train_loader)
@@ -235,11 +256,9 @@ class TorchModelMixin:
 
     def test_on_one_epoch(
             self,
-            X_t,
-            y_t,
+            dataloader,
             model,
-            loss_fn,
-            batch_size
+            loss_fn
     ):
         """
         Test function on one epoch
@@ -247,8 +266,7 @@ class TorchModelMixin:
         current loss on this epoch, average-accuracy on this epoch
 
         """
-        test_data = TensorDataset(X_t, y_t)
-        test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+        test_loader = dataloader
 
         model.eval()  # set model to evaluate mode
         test_loss, test_acc, test_num_batches = 0, 0, len(test_loader)
@@ -313,6 +331,7 @@ class TorchModelMixin:
             lr_factor=0.1,
             restore_best_weights=True,
             verbose=True,
+            callbacks=None,
             **lr_scheduler_kwargs
     ):
         """
@@ -333,16 +352,22 @@ class TorchModelMixin:
         X, y = self._check_x_y_type(X, y)
 
         self._get_batch_size(X, batch_size=batch_size)
+        train_dataloader = self.data_loader(X, y)
+        test_dataloader = None
+
+        if eval_set is not None:
+            test_dataloader = self.data_loader(*self._check_x_y_type(eval_set[0], eval_set[1]))
 
         self.current_patience = 0
         self.current_loss = np.finfo(np.float64).max - min_delta
         self.best_weight = copy.deepcopy(self.model.state_dict())
+
         batches = int(np.ceil(len(X) / self._batch_size))
 
         if lr_scheduler == 'ReduceLROnPlateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer,
-                mode='min' if loss_type == 'down' else 'max',
+                mode=('max', 'min')[loss_type == 'down'],
                 patience=lr_scheduler_patience, factor=lr_factor, **lr_scheduler_kwargs
             )
         elif lr_scheduler == 'CosineAnnealingLR':
@@ -356,16 +381,25 @@ class TorchModelMixin:
         else:
             raise KeyError(f"{lr_scheduler} is invalid.")
 
+        training_log_print = OrderedDict({
+            "epoch_msg": "",
+            "current_p_msg": "",
+            "lr_msg": "",
+            "loss_msg": "",
+            "val_loss_msg": "",
+            "time_msg": ""
+        })
+
         for epoch in range(epochs):
             tik = time.time()
             stop_state = False
 
-            metric_string = f"Epoch {epoch + 1:>1d}/{epochs:>1d} \n " \
-                            f"\r{batches}/{batches} -"
+            training_log_print["epoch_msg"] = f"Epoch {epoch + 1:>1d}/{epochs:>1d}  Loss_Fn {self.loss_fn_name}\n " \
+                                              f"\r{batches}/{batches}"
 
-            train_loss_current, train_acc = self.train_on_one_epoch(X, y, model=self.model, loss_fn=self.loss_fn,
-                                                                    optimizer=self.optimizer,
-                                                                    batch_size=self._batch_size)
+            train_loss_current, train_acc = self.train_on_one_epoch(train_dataloader, model=self.model,
+                                                                    loss_fn=self.loss_fn,
+                                                                    optimizer=self.optimizer)
 
             if lr_scheduler:
                 last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
@@ -373,36 +407,38 @@ class TorchModelMixin:
 
                 if last_lr != self.optimizer.state_dict()['param_groups'][0]['lr']:
                     last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
-                    metric_string += f" [*lr: {last_lr:>8}] -" if len(
-                        str(last_lr)) <= 8 else f" [*lr: {last_lr:>8}] -\n"
+                    training_log_print["lr_msg"] = f"[*lr: {last_lr:>5}]" if len(
+                        str(last_lr)) <= 5 else f" [*lr: {last_lr:>5}]"
 
-            metric_string += f" loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f} -"
+            training_log_print["loss_msg"] = f"loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f}"
 
             if monitor == 'loss':
                 stop_state = self._early_stopping(train_loss_current, loss_type=loss_type,
                                                   min_delta=min_delta, patience=patience,
                                                   restore_best_weights=restore_best_weights)
             else:
-                if eval_set is not None:
-                    X_t, y_t = self._check_x_y_type(eval_set[0], eval_set[1])
-
-                    test_loss, test_acc = self.test_on_one_epoch(X_t, y_t, self.model, self.loss_fn, self._batch_size)
+                if test_dataloader:
+                    test_loss, test_acc = self.test_on_one_epoch(test_dataloader, self.model, self.loss_fn)
                     stop_state = self._early_stopping(test_loss, loss_type=loss_type, min_delta=min_delta,
                                                       patience=patience, restore_best_weights=restore_best_weights)
 
-                    metric_string += f" val_loss: {test_loss:>.4f} - val_{metrics_name}: {test_acc:>.4f} -"
+                    training_log_print[
+                        "val_loss_msg"
+                    ] = f"val_loss: {test_loss:>.4f} - val_{metrics_name}: {test_acc:>.4f}"
 
-            if monitor is not None:
-                ms_list = metric_string.split('-')
-                ms_list.insert(1, f" p{self.current_patience} ")
-                metric_string = '-'.join(ms_list)
+            if monitor is not None and eval_set is not None:
+                training_log_print["current_p_msg"] = f"p{self.current_patience}"
+
+            tok = time.time()
+            training_log_print["time_msg"] = f"{tok - tik:>.2f}s/epoch - {(tok - tik) / batches:>.3f}s/step"
+
+            metric_string = ' - '.join([i for i in training_log_print.values() if len(i) > 0])
 
             if verbose:
-                tok = time.time()
-                metric_string += f" {tok - tik:>.2f}s/epoch - {(tok - tik) / batches:>.3f}s/step"
                 print(metric_string)
 
             if stop_state:
+                print(f"Early stopping at epoch {epoch}.")
                 break
 
         self.__spinesTS_is_fitted__ = True
@@ -412,12 +448,7 @@ class TorchModelMixin:
         self.model.eval()
         with torch.no_grad():
             X, y = torch.Tensor(X), torch.Tensor(y)
-            X_cuda, _ = self._move_to_device(X), self._move_to_device(y)
-            pred = self.model(X_cuda).cpu().numpy()
+            X_gpu, _ = self._move_to_device(X), self._move_to_device(y)
+            pred = self.model(X_gpu).cpu().numpy()
 
         return self.metric(y, pred)
-
-    def summary(self):
-        assert self.model is not None, "model must be not None."
-        if self.model is not None:
-            torch_summary(self.model, input_shape=(self.in_features,))

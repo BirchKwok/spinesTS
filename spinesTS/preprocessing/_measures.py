@@ -158,3 +158,14 @@ class MultiDimScaler:
             x[:, :, i] = self.scalers[i].inverse_transform(x[:, :, i])
 
         return torch.Tensor(x).float()
+
+
+class StandardScalerPipeline:
+    def __init__(self, *args):
+        pass
+
+    def inverse_transform(self, *args):
+        pass
+
+    def __call__(self, *args):
+        pass

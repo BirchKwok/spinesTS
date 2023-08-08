@@ -75,3 +75,28 @@ class DimensionConv1d(nn.Module):
     def forward(self, x):
         assert x.ndim == 2
         return self.conv1d(x.view(x.shape[0], x.shape[1], 1)).squeeze()
+
+
+class DifferentialLayer(nn.Module):
+    """Differencing the incoming tensor along an axis.
+            accept a 2-dimensional tensor x, and return a 2-dimensional tensor of the shape
+
+    Parameters
+    ----------
+    kernel_size : int, moving average window size
+    stride : int, the jump-step-length in calculating the moving average
+    padding : str, only support to 'same' and 'valid', valid means not to pad, same means padding with
+    the nearest valid value to the null value
+    Returns
+    -------
+    torch.Tensor
+    """
+    def __init__(self, axis=-1, diff_n=1):
+        super(DifferentialLayer, self).__init__()
+        self.diff_n = diff_n
+        self.axis = axis
+
+    def forward(self, x):
+        assert x.ndim == 2
+        res = torch.diff(x, n=self.diff_n, dim=self.axis)
+        return res

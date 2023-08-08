@@ -19,7 +19,8 @@ __version__ = "0.0.1"
 
 __all__ = [
     'base', 'data', 'features_extractor', 'layers', 'ml_model', 'nn',
-    'pipeline', 'plotting', 'preprocessing', 'utils', 'metrics'
+    'pipeline', 'plotting', 'preprocessing', 'utils', 'metrics',
+    'callbacks'
 ]
 
 from . import (
@@ -33,5 +34,6 @@ from . import (
     plotting,
     preprocessing,
     utils,
-    metrics
+    metrics,
+    callbacks
 )

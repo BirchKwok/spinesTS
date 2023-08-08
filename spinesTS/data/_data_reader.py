@@ -7,7 +7,7 @@ from spinesTS.base import DataTS
 FILE_PATH = os.path.dirname(__file__)
 
 
-def _get_it_name(built_in_func, name):
+def _call_name(built_in_func, name):
     """Wrapper of built-in datasets
 
     Parameters
@@ -40,6 +40,7 @@ class DataReader:
     -------
     None
     """
+
     def __init__(self, fp, sep=',', **pd_read_csv_kwargs):
         self._FILEPATH = os.path.join(FILE_PATH, './built-in-datasets/', fp)
         if not os.path.exists(self._FILEPATH):
@@ -75,6 +76,7 @@ class BuiltInSeriesData:
     -------
     None
     """
+
     def __init__(self, print_file_list=True):
         self.file_list = sorted(os.listdir(os.path.join(FILE_PATH, './built-in-datasets/')))
         if print_file_list:
@@ -85,7 +87,7 @@ class BuiltInSeriesData:
                 _.append(', '.join(self[i].dataset.columns.tolist()))
                 table.append(_)
             print(tabulate(table, headers=["table's name", "table's columns"], showindex="always",
-                    tablefmt="pretty", colalign=("right","left", "left")))
+                           tablefmt="pretty", colalign=("right", "left", "left")))
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -105,8 +107,8 @@ class BuiltInSeriesData:
         return self.file_list
 
 
-LoadElectricDataSets = _get_it_name(BuiltInSeriesData(print_file_list=False), 'Electric_Production')
-LoadMessagesSentDataSets = _get_it_name(BuiltInSeriesData(print_file_list=False), 'Messages_Sent')
-LoadMessagesSentHourDataSets = _get_it_name(BuiltInSeriesData(print_file_list=False), 'Messages_Sent_Hour')
-LoadWebSales = _get_it_name(BuiltInSeriesData(print_file_list=False), 'Web_Sales')
-LoadSupermarketIncoming = _get_it_name(BuiltInSeriesData(print_file_list=False), 'Supermarket_Incoming')
+LoadElectricDataSets = _call_name(BuiltInSeriesData(print_file_list=False), 'Electric_Production')
+LoadMessagesSentDataSets = _call_name(BuiltInSeriesData(print_file_list=False), 'Messages_Sent')
+LoadMessagesSentHourDataSets = _call_name(BuiltInSeriesData(print_file_list=False), 'Messages_Sent_Hour')
+LoadWebSales = _call_name(BuiltInSeriesData(print_file_list=False), 'Web_Sales')
+LoadSupermarketIncoming = _call_name(BuiltInSeriesData(print_file_list=False), 'Supermarket_Incoming')
