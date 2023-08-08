@@ -72,8 +72,10 @@ class GAUNet(TorchModelMixin):
                  skip_connect: bool = True,
                  dropout: float = 0.,
                  learning_rate: float = 0.01,
-                 random_seed: int = 42) -> None:
-        super(GAUNet, self).__init__(random_seed)
+                 random_seed: int = 42,
+                 device=None
+                 ) -> None:
+        super(GAUNet, self).__init__(random_seed, device)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.flip_features = flip_features

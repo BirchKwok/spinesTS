@@ -1,30 +1,33 @@
-import os
-import numpy as np
 import random
+from typing import Optional
+import warnings
 
+import numpy as np
 import torch
 
+max_seed_value = np.iinfo(np.uint32).max
+min_seed_value = np.iinfo(np.uint32).min
 
-def seed_everything(seed=0):
-    """Set random seed for everything.
-        Include python built-in random module, numpy module, python hash seed,
-        pytorch manual_seed and cuda manual_seed_all.
 
-    Parameters
-    ----------
-    seed : int, random seed
-
-    Returns
-    -------
-    None
-
+def seed_everything(seed: Optional[int] = None) -> int:
     """
+    """
+    if seed is None:
+        seed = np.random.randint(min_seed_value, max_seed_value)
+        warnings.warn(f"No seed found, seed set to {seed}")
+    elif not isinstance(seed, int):
+        seed = int(seed)
+
+    if not (min_seed_value <= seed <= max_seed_value):
+        warnings.warn(f"{seed} is not in bounds, numpy accepts from {min_seed_value} to {max_seed_value}")
+        seed = np.random.randint(min_seed_value, max_seed_value)
+
     random.seed(seed)
     np.random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+    return seed
 
 
 class FrozenDict(dict):

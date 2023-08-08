@@ -1,7 +1,6 @@
 from typing import *
 import numpy as np
 import copy
-from spinesTS.base._const import DataTS
 
 
 class DataGenerator:

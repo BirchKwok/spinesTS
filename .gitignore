@@ -38,6 +38,9 @@ pip-delete-this-directory.txt
 
 catboost_info/
 
+# jupyter cache
+.jupyter/
+
 # DevMustKnow.md
 
 # Unit examples / coverage reports
