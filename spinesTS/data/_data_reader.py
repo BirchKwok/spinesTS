@@ -2,7 +2,7 @@ import re
 import pandas as pd
 import os
 from tabulate import tabulate
-from spinesTS.base import DataTS
+from spinesTS.data._data_base import DataTS
 
 FILE_PATH = os.path.dirname(__file__)
 
@@ -27,44 +27,6 @@ def _call_name(built_in_func, name):
     return wrap
 
 
-class DataReader:
-    """Data reader for table-data
-
-    Parameters
-    ----------
-    fp : file path
-    sep : str, file separator
-    **pd_read_csv_kwargs : pandas.read_csv function params
-
-    Returns
-    -------
-    None
-    """
-
-    def __init__(self, fp, sep=',', **pd_read_csv_kwargs):
-        self._FILEPATH = os.path.join(FILE_PATH, './built-in-datasets/', fp)
-        if not os.path.exists(self._FILEPATH):
-            self._FILEPATH = fp
-        assert os.path.exists(self._FILEPATH), f'No such file or directory: {self._FILEPATH}'
-        self._ds = DataTS(pd.read_csv(self._FILEPATH, sep=sep, **pd_read_csv_kwargs))
-
-    @property
-    def dataset(self):
-        return self._ds.data
-
-    def __len__(self):
-        return len(self._ds.data)
-
-    def __getitem__(self, item):
-        return self._ds.data.__getitem__(item)
-
-    def __str__(self):
-        return self._ds.__str__()
-
-    def __repr__(self):
-        return self._ds.__repr__()
-
-
 class BuiltInSeriesData:
     """Load the built-in data
 
@@ -82,29 +44,36 @@ class BuiltInSeriesData:
         if print_file_list:
             table = []
             for i in range(len(self.file_list)):
-                _ = []
-                _.append(re.split('\.', self.file_list[i])[0].strip())
-                _.append(', '.join(self[i].dataset.columns.tolist()))
+                _ = [re.split('\.', self.file_list[i])[0].strip(),
+                     ', '.join(self[i].dataset.columns.tolist())]
                 table.append(_)
             print(tabulate(table, headers=["table's name", "table's columns"], showindex="always",
                            tablefmt="pretty", colalign=("right", "left", "left")))
 
+    def _load_data(self, fp):
+        self._FILEPATH = os.path.join(FILE_PATH, './built-in-datasets/', fp)
+        if not os.path.exists(self._FILEPATH):
+            self._FILEPATH = fp
+        assert os.path.exists(self._FILEPATH), f'No such file or directory: {self._FILEPATH}'
+
+        return DataTS(pd.read_csv(self._FILEPATH, sep=','))
+
     def __getitem__(self, item):
         if isinstance(item, int):
-            return DataReader(os.path.join(FILE_PATH, './built-in-datasets/',
-                                           self.file_list[item]))
+            return self._load_data(os.path.join(FILE_PATH, './built-in-datasets/',
+                                                self.file_list[item]))
         elif isinstance(item, str):
             if not item.endswith('.csv'):
                 item = item + '.csv'
-            return DataReader(os.path.join(FILE_PATH, './built-in-datasets/',
-                                           self.file_list[self.file_list.index(item)]))
+            return self._load_data(os.path.join(FILE_PATH, './built-in-datasets/',
+                                                self.file_list[self.file_list.index(item)]))
         else:
             raise KeyError(f"invalid key: {item}")
 
     @property
     def names(self):
         """Returns the built-in series data names-list."""
-        return self.file_list
+        return [''.join(i.split('.')[:-1]) for i in self.file_list]
 
 
 LoadElectricDataSets = _call_name(BuiltInSeriesData(print_file_list=False), 'Electric_Production')
