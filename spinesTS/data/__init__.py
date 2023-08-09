@@ -5,7 +5,6 @@ from ._data_reader import (
     LoadMessagesSentDataSets,
     LoadWebSales,
     LoadSupermarketIncoming,
-    DataReader,
     BuiltInSeriesData
 )
 
