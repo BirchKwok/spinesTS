@@ -47,6 +47,7 @@ class BuiltInSeriesData:
                 _ = [re.split('\.', self.file_list[i])[0].strip(),
                      ', '.join(self[i].columns.tolist())]
                 table.append(_)
+
             print(tabulate(table, headers=["ds name", "columns"], showindex="always",
                            tablefmt="pretty", colalign=("right", "left", "left")))
 
@@ -68,6 +69,9 @@ class BuiltInSeriesData:
             return self._load_data(self.file_list[self.file_list.index(item)])
         else:
             raise KeyError(f"invalid key: {item}")
+
+    def __len__(self):
+        return len(self.file_list)
 
     @property
     def names(self):

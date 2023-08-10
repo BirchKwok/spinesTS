@@ -441,7 +441,8 @@ class TorchModelMixin:
                 print(metric_string)
 
             if stop_state:
-                print(f"Early stopping at epoch {epoch}.")
+                if verbose:
+                    print(f"Early stopping at epoch {epoch}.")
                 break
 
         self.__spinesTS_is_fitted__ = True
