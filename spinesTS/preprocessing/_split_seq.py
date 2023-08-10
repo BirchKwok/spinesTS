@@ -1,10 +1,13 @@
+from functools import partial
+from typing import Union, Any
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from functools import partial
 
 
-def split_series(x_seq, y_seq, window_size, pred_steps, train_size=None, shuffle=False, skip_steps=1):
+def split_series(x_seq, y_seq, window_size: int, pred_steps: int, train_size: Union[None, float] = None,
+                 shuffle: bool=False, skip_steps: int=1):
     """Returns two-dimensional array cut by the specified window size.
 
     Parameters
@@ -25,7 +28,7 @@ def split_series(x_seq, y_seq, window_size, pred_steps, train_size=None, shuffle
     otherwise return X, y
     """
     assert isinstance(x_seq, (pd.Series, np.ndarray, list)) and isinstance(y_seq, (pd.Series, np.ndarray, list))
-    assert train_size is None or (0< train_size < 1 and isinstance(train_size, float))
+    assert train_size is None or (0 < train_size < 1 and isinstance(train_size, float))
     assert isinstance(shuffle, bool)
     assert isinstance(pred_steps, int) and pred_steps > 0
 
@@ -46,7 +49,7 @@ def split_series(x_seq, y_seq, window_size, pred_steps, train_size=None, shuffle
         if out_end_index > len(x_seq):
             break
 
-        seq_x, seq_y = list(x_seq[i*skip_steps:end_index]), list(y_seq[end_index:out_end_index])
+        seq_x, seq_y = list(x_seq[i * skip_steps:end_index]), list(y_seq[end_index:out_end_index])
 
         X.append(seq_x)
         y.append(seq_y)

@@ -45,9 +45,9 @@ class BuiltInSeriesData:
             table = []
             for i in range(len(self.file_list)):
                 _ = [re.split('\.', self.file_list[i])[0].strip(),
-                     ', '.join(self[i].dataset.columns.tolist())]
+                     ', '.join(self[i].columns.tolist())]
                 table.append(_)
-            print(tabulate(table, headers=["table's name", "table's columns"], showindex="always",
+            print(tabulate(table, headers=["ds name", "columns"], showindex="always",
                            tablefmt="pretty", colalign=("right", "left", "left")))
 
     def _load_data(self, fp):
@@ -56,17 +56,16 @@ class BuiltInSeriesData:
             self._FILEPATH = fp
         assert os.path.exists(self._FILEPATH), f'No such file or directory: {self._FILEPATH}'
 
-        return DataTS(pd.read_csv(self._FILEPATH, sep=','))
+        return DataTS(pd.read_csv(self._FILEPATH, sep=','), name='.'.join(fp.split('.')[:-1]))
 
     def __getitem__(self, item):
         if isinstance(item, int):
-            return self._load_data(os.path.join(FILE_PATH, './built-in-datasets/',
-                                                self.file_list[item]))
+            return self._load_data(self.file_list[item])
+
         elif isinstance(item, str):
             if not item.endswith('.csv'):
                 item = item + '.csv'
-            return self._load_data(os.path.join(FILE_PATH, './built-in-datasets/',
-                                                self.file_list[self.file_list.index(item)]))
+            return self._load_data(self.file_list[self.file_list.index(item)])
         else:
             raise KeyError(f"invalid key: {item}")
 

@@ -27,6 +27,7 @@ class EncoderDecoderBlock(nn.Module):
 
         self.linear = nn.Linear(decoder_input_features, out_features)
         self.selu = nn.SELU()
+        # self.layer_norm = nn.LayerNorm(decoder_input_features)
 
     def forward(self, x, last_output):
         if x.ndim == 2:
@@ -40,6 +41,8 @@ class EncoderDecoderBlock(nn.Module):
 
         _, (h, c) = self.encoder(last_output)
         output, (h, c) = self.decoder(x, (h, c))
+
+        # output = self.layer_norm(output)
 
         return self.selu(self.linear(output.squeeze()))
 
@@ -75,7 +78,6 @@ class Seq2SeqBlock(nn.Module):
 
     def forward(self, x):
         x = self.differential_layer(x)
-
         last_output = x
         for block in self.blocks:
             last_output = block(x, last_output)

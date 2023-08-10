@@ -1,132 +1,132 @@
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMModel
-from sklearn.preprocessing import StandardScaler
 
 from spinesTS.base import MLModelMixin
 from spinesTS.ml_model import MultiOutputRegressor
 from spinesTS.utils import check_is_fitted
 from spinesTS.pipeline import Pipeline
-from spinesTS.preprocessing import split_series
-from spinesTS.features_extractor import ContinuousFeatureExtractor
+from spinesTS.preprocessing import split_series, lag_splits
+from spinesTS.features_generator import date_features
 
 
-def preprocessing_gbrt_with_generate_features(X, input_features, output_features, target_col,
-                                              train_size=0.8,
-                                              category_cols=None, outliers_window_size=0.15, date_col=None):
-    assert isinstance(X, pd.DataFrame)
-    assert np.sum(np.isnan(X[target_col].values)) in [0, output_features]
+class GBRTPreprocessing:
+    # TODO: 新增gbrt特征工程处理类
+    def __init__(self, input_features, output_features, target_col,
+                 train_size=0.8, date_col=None):
+        self.cf = None
+        self.input_features = input_features
+        self.output_features = output_features
+        self.target_col = target_col
+        self.train_size = train_size
+        self.date_col = date_col
 
-    if hasattr(category_cols, '__getitem__') and not issubclass(type(category_cols), dict):
-        if isinstance(category_cols[0], str):
-            cate_cols = [X.columns.tolist().index(i) for i in category_cols]
-        elif isinstance(category_cols[0], int):
-            cate_cols = [i for i in category_cols]
-        else:
-            raise ValueError("category_cols only accepts an int-type or a str-type sequence.")
-    elif category_cols:
-        if isinstance(category_cols, int):
-            cate_cols = [category_cols]
-        elif isinstance(category_cols, str):
-            cate_cols = [X.columns.tolist().index(category_cols)]
-        else:
-            raise ValueError("category_cols only accepts int or str type or a sequence which has __getitem__ attribute "
-                             "and is not a dict-type.")
-    if category_cols:
-        _cate_fea = X.iloc[:, cate_cols].values
-
-    # non-lag features
-    _non_lag_fea = X.loc[:, ~X.columns.str.contains(target_col)]
-    _non_lag_fea = _non_lag_fea.values
-
-    _tar = X[target_col].values
-
-    x_train, x_test, y_train, y_test = split_series(_tar, _tar, input_features, output_features, train_size)
-    x_train_non_lag, x_test_non_lag, _, _ = split_series(_non_lag_fea, _tar, input_features, output_features,
-                                                         train_size)
-    if category_cols:
-        x_train_cate, x_test_cate, _, _ = split_series(_cate_fea, _cate_fea, input_features, output_features,
-                                                       train_size)
-
-    cf = ContinuousFeatureExtractor(window_size=outliers_window_size)
-    x_train = cf.fit_transform(x_train)
-    x_test = cf.transform(x_test)
-
-    x_train = np.concatenate((x_train, x_train_non_lag[:, -1, :].squeeze()), axis=1)
-    x_test = np.concatenate((x_test, x_test_non_lag[:, -1, :].squeeze()), axis=1)
-
-    if category_cols:
-        _shape = x_train.shape[1]
-        x_train = np.concatenate((x_train, x_train_cate[:, -1, :].squeeze()), axis=1)
-        x_test = np.concatenate((x_test, x_test_cate[:, -1, :].squeeze()), axis=1)
-        cate_cols = [i for i in range(_shape, x_train.shape[1])]
-
-        return cate_cols, (x_train, x_test, y_train, y_test)
-
-    return x_train, x_test, y_train, y_test
-
-
-def preprocessing_gbrt(X, input_features, output_features, target_col):
-    assert isinstance(X, (pd.DataFrame, np.ndarray))
-    if isinstance(X, pd.DataFrame):
-        _non_lag_fea = X.loc[:, ~X.columns.str.contains(target_col)]
-    else:
-        assert X.ndim == 2, "Only accept two-dim numpy.ndarray."
-        _non_lag_fea = X[:, [i for i in range(X.shape[1]) if i != target_col]]
-
-    _tar = X[target_col].values if isinstance(X, pd.DataFrame) else X[:, target_col]
-    x, y = split_series(_tar, _tar, input_features, output_features)
-    x_non_lag, _ = split_series(_non_lag_fea, _tar, input_features, output_features)
-
-    return np.concatenate((x, x_non_lag[:, -1, :].squeeze()), axis=1), y
-
-
-class WideGBRT(MLModelMixin):
-    def __init__(self, boosting_type='gbdt', num_leaves=31, max_depth=-1,
-                 n_estimators=500, metric='mae', reg_alpha=0., reg_lambda=0.,
-                 learning_rate=0.025, verbose=0, random_state=None, **lgb_kwargs
-                 ):
-        self.model = None
         self.__spinesTS_is_fitted__ = False
-        self.params = {
-            'boosting_type': boosting_type,
-            'objective': 'regression',
-            'max_depth': max_depth,
-            'metric': metric,
-            'reg_alpha': reg_alpha,
-            'reg_lambda': reg_lambda,
-            'num_leaves': num_leaves,
-            'learning_rate': learning_rate,
-            'verbose': verbose,
-            'random_state': random_state,
-            'n_estimators': n_estimators,
-            **lgb_kwargs
-        }
 
-    def fit(self, X, y, scaler=StandardScaler(), sample_weight=None, init_score=None, group=None, eval_set=None,
-            eval_names=None, eval_sample_weight=None, eval_class_weight=None, eval_init_score=None,
-            eval_group=None, eval_metric=None, feature_name='auto',
-            categorical_feature='auto', callbacks=None, init_model=None
-            ):
-        if callbacks is None:
-            from lightgbm.callback import early_stopping
-            callbacks = [early_stopping(100)]
+    def process_date_col(self, x):
+        """Processing date column"""
+        return date_features(x, date_col=self.date_col)
 
-        multi_reg = Pipeline([
-            ('sc', scaler),
-            ('multi_reg', MultiOutputRegressor(LGBMModel(**self.params)))
-        ])
+    def check_x_types(self, x):
+        assert isinstance(x, (pd.DataFrame, np.ndarray))
 
-        multi_reg.fit(X, y, sample_weight=sample_weight, init_score=init_score, group=group
-                      , eval_set=eval_set, eval_names=eval_names, eval_sample_weight=eval_sample_weight,
-                      eval_class_weight=eval_class_weight, eval_init_score=eval_init_score,
-                      eval_group=eval_group, eval_metric=eval_metric, feature_name=feature_name,
-                      categorical_feature=categorical_feature, init_model=init_model, callbacks=callbacks)
-        self.model = multi_reg
+        if not isinstance(x, pd.DataFrame):
+            assert x.ndim == 2, "Only accept two-dim numpy.ndarray."
+            if not isinstance(self.target_col, int):
+                raise TypeError("when `x` is of type `numpy.ndarray`, the `target_col` parameter must be an integer.")
+
+            if self.date_col is not None and not isinstance(self.date_col, int):
+                raise TypeError("when `x` is of type `numpy.ndarray`, the `date_col` parameter must be an integer.")
+
+    def fit(self, x):
+        self.check_x_types(x)
 
         self.__spinesTS_is_fitted__ = True
         return self
 
-    def predict(self, X):
+    def transform(self, x, mode='train'):
+        """Transform data to fit GBRT model.
+
+        result's columns sequence:
+        lag_1, lag_2, lag_3, ..., lag_n, x_col_1, x_col_2, ..., x_col_n, date_fea_1, date_fea_2, ..., date_fea_n
+        Parameters
+        ---------
+        mode: ('train', 'predict'), the way to transform data, default: 'train'
+
+
+        Return
+        ------
+        numpy.ndarray, x_train, x_test, y_train, y_test, when mode = 'train', else, x, y
+
+        """
+        assert mode in ('train', 'predict')
         check_is_fitted(self)
-        return self.model.predict(X)
+
+        self.check_x_types(x)
+
+        if isinstance(x, pd.DataFrame):
+            if self.date_col is not None:
+                x = self.process_date_col(x)
+
+            _non_lag_fea = x.loc[:, ~x.columns.str.contains(self.target_col)].values
+        else:
+            if self.date_col is not None:
+                x = self.process_date_col(pd.DataFrame(x, columns=range(x.shape[1]))).values
+
+            _non_lag_fea = x[:, [i for i in range(x.shape[1]) if i != self.target_col]]
+
+        _tar = x[self.target_col].values if isinstance(x, pd.DataFrame) else x[:, self.target_col]
+
+        if mode == 'train':
+            if self.train_size is None:
+                x, y = split_series(_tar, _tar, self.input_features, self.output_features, train_size=self.train_size)
+
+                x_non_lag, _ = split_series(_non_lag_fea, _tar, self.input_features,
+                                            self.output_features, train_size=self.train_size)
+
+                return np.concatenate((x, x_non_lag[:, -1, :].squeeze()), axis=1), y
+            else:
+                x_train, x_test, y_train, y_test = split_series(_tar, _tar, self.input_features,
+                                                                self.output_features, train_size=self.train_size)
+
+                x_non_lag_train, x_non_lag_test, _, _ = split_series(_non_lag_fea, _tar, self.input_features,
+                                                                     self.output_features, train_size=self.train_size)
+                # columns sequence:
+                # lag_1, lag_2, lag_3, ..., lag_n, x_col_1, x_col_2, ..., x_col_n,
+                # date_fea_1, date_fea_2, ..., date_fea_n
+                return np.concatenate((x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
+                    np.concatenate((x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
+        else:
+            split_tar = lag_splits(
+                _tar, window_size=self.input_features, skip_steps=1, pred_steps=1
+            )[:-self.output_features]
+
+            split_non_lag_fea = lag_splits(
+                _non_lag_fea, window_size=self.input_features, skip_steps=1, pred_steps=1
+            )[:-self.output_features]
+
+            return np.concatenate((split_tar, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
+
+
+class WideGBRT(MLModelMixin):
+    def __init__(self, model, scaler=None):
+        if scaler:
+            multi_reg = Pipeline([
+                ('sc', scaler),
+                ('multi_reg', MultiOutputRegressor(model))
+            ])
+
+            self.model = multi_reg
+        else:
+            self.model = MultiOutputRegressor(model)
+
+        self.__spinesTS_is_fitted__ = False
+
+    def fit(self, X, y, **model_fit_kwargs):
+        self.model.fit(X, y, **model_fit_kwargs)
+
+        self.__spinesTS_is_fitted__ = True
+        return self
+
+    def predict(self, X, **model_predict_kwargs):
+        check_is_fitted(self)
+        return self.model.predict(X, **model_predict_kwargs)

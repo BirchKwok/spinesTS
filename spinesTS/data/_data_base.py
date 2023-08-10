@@ -7,15 +7,13 @@ from pandas.io.formats import format as fmt
 
 class DataTS(pd.DataFrame):
     """provide common code for spinesTS.data module. """
-    def __init__(self, dataset, index=None, columns=None, dtype=None):
+    def __init__(self, dataset, index=None, columns=None, dtype=None, name=None):
         super().__init__(data=dataset, index=index, columns=columns, dtype=dtype)
 
-    @property
-    def dataset(self):
-        return self
+        self.dataset_name = name or 'spinesTS.DataTS'
 
     def __str__(self):
-        return f"spinesTS.DataTS(shape={self.shape}, head_data=\n{self.head()})"
+        return f"{self.dataset_name} dataset, shape={self.shape}, head_data=\n{self.head()}"
 
     def _repr__(self):
         return self.__str__()
@@ -60,8 +58,9 @@ class DataTS(pd.DataFrame):
                 decimal=".",
             )
 
-            prefix = f"<div>spinesTS.DataTS(shape={self.shape})</div>"
-            return prefix + fmt.DataFrameRenderer(formatter).to_html(notebook=True)
+            prefix = f"<div><b>{self.dataset_name}</b>"
+            postfix = f"shape: {self.shape}</div>"
+            return prefix + fmt.DataFrameRenderer(formatter).to_html(notebook=True) + postfix
         else:
             return None
 

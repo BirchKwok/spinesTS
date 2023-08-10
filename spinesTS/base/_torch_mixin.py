@@ -27,12 +27,12 @@ def set_device(device=None):
     if device is None:
         if torch.cuda.is_available():
             device = 'cuda:0' if torch.cuda.device_count() > 1 else 'cuda'
-        elif torch.backends.mps.is_available():
-            device = 'mps'
+        # Because the mps approach predicts far less accurately than the cpu approach
+        # during the developer's development process.
+        # elif torch.backends.mps.is_available():
+        #     device = 'mps'
         else:
             device = 'cpu'
-
-    print(f"Using {device} backend")
 
     return device
 
@@ -105,7 +105,7 @@ class TorchModelMixin:
     def fit(self,
             X,
             y,
-            epochs=1000,
+            epochs=3000,
             batch_size='auto',
             eval_set=None,
             loss_type='down',
@@ -113,12 +113,11 @@ class TorchModelMixin:
             monitor='val_loss',
             min_delta=0,
             patience=10,
-            lr_scheduler='ReduceLROnPlateau',
+            lr_scheduler=None,
             lr_scheduler_patience=10,
             lr_factor=0.1,
             restore_best_weights=True,
             verbose=True,
-            callbacks=None,
             **lr_scheduler_kwargs
             ):
         """Fit your model.
@@ -137,14 +136,17 @@ class TorchModelMixin:
         min_delta : minimum change in the monitored quantity to qualify as an improvement, 
             i.e. an absolute change of less than min_delta, will count as no improvement, default to 0
         patience : number of epochs with no improvement after which training will be stopped, default to 10
-        lr_scheduler : learning rate scheduler name, one of ['ReduceLROnPlateau', 'CosineAnnealingLR', 'CosineAnnealingWarmRestarts']
+        lr_scheduler : learning rate scheduler name, one of ['ReduceLROnPlateau', 'CosineAnnealingLR',
+            'CosineAnnealingWarmRestarts', None]
         lr_scheduler_patience :  number of epochs with no improvement after which learning rate will be reduced. 
-            For example, if patience = 2, then we will ignore the first 2 epochs with no improvement, and will only decrease the LR after the 3rd epoch 
-            if the loss still hasn’t improved then, default: 10
+            For example, if patience = 2, then we will ignore the first 2 epochs with no improvement,
+            and will only decrease the LR after the 3rd epoch  if the loss still hasn’t improved then, default: 10
         lr_factor : factor by which the learning rate will be reduced. new_lr = lr * factor. Default: 0.1
-        restore_best_weights : Whether to restore model weights from the epoch with the best value of the monitored quantity. 
+        restore_best_weights : Whether to restore model weights
+                        from the epoch with the best value of the monitored quantity.
             If False, the model weights obtained at the last step of training are used. 
-            If True, and if no epoch improves, training will run for patience epochs and restore weights from the best epoch in that set. Default to True.
+            If True, and if no epoch improves, training will run for patience epochs and restore weights from
+                the best epoch in that set. Default to True.
         verbose : Whether to  displays messages, default to True
         **lr_scheduler_kwargs : torch.optim.lr_scheduler parameters
 
@@ -154,6 +156,9 @@ class TorchModelMixin:
 
         """
         # self.model = torch.compile(self.model)  # mac mps or python 3.11 not supported yet
+        if verbose:
+            print(f"Using {self.device} backend")
+
         return self._fit(
             X,
             y,
@@ -170,7 +175,6 @@ class TorchModelMixin:
             lr_factor=lr_factor,
             restore_best_weights=restore_best_weights,
             verbose=verbose,
-            callbacks=callbacks,
             **lr_scheduler_kwargs
         )
 
@@ -331,7 +335,6 @@ class TorchModelMixin:
             lr_factor=0.1,
             restore_best_weights=True,
             verbose=True,
-            callbacks=None,
             **lr_scheduler_kwargs
     ):
         """
