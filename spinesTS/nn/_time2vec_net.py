@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+
 from spinesTS.layers import Time2Vec
 from spinesTS.base import TorchModelMixin
 

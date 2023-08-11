@@ -10,15 +10,17 @@ from spinesTS.features_generator import date_features
 
 
 class GBRTPreprocessing:
-    # TODO: 新增gbrt特征工程处理类
+    """WideGBRT features engineering class"""
     def __init__(self, input_features, output_features, target_col,
-                 train_size=0.8, date_col=None):
+                 train_size=0.8, date_col=None, differential_n=1):
         self.cf = None
         self.input_features = input_features
         self.output_features = output_features
         self.target_col = target_col
         self.train_size = train_size
         self.date_col = date_col
+        assert isinstance(differential_n, int) and differential_n >= 0
+        self.differential_n = differential_n
 
         self.__spinesTS_is_fitted__ = False
 
@@ -44,14 +46,14 @@ class GBRTPreprocessing:
         return self
 
     def transform(self, x, mode='train'):
-        """Transform data to fit GBRT model.
+        """Transform data to fit WideGBRT model.
 
         result's columns sequence:
         lag_1, lag_2, lag_3, ..., lag_n, x_col_1, x_col_2, ..., x_col_n, date_fea_1, date_fea_2, ..., date_fea_n
         Parameters
         ---------
+        x: spines.data.DataTS or pandas.core.DataFrame or numpy.ndarray, the data that needs to be transformed
         mode: ('train', 'predict'), the way to transform data, default: 'train'
-
 
         Return
         ------
@@ -80,6 +82,9 @@ class GBRTPreprocessing:
             if self.train_size is None:
                 x, y = split_series(_tar, _tar, self.input_features, self.output_features, train_size=self.train_size)
 
+                if self.differential_n > 0:
+                    x = np.diff(x, axis=1, n=self.differential_n)
+
                 x_non_lag, _ = split_series(_non_lag_fea, _tar, self.input_features,
                                             self.output_features, train_size=self.train_size)
 
@@ -87,6 +92,9 @@ class GBRTPreprocessing:
             else:
                 x_train, x_test, y_train, y_test = split_series(_tar, _tar, self.input_features,
                                                                 self.output_features, train_size=self.train_size)
+                if self.differential_n > 0:
+                    x_train = np.diff(x_train, axis=1, n=self.differential_n)
+                    x_test = np.diff(x_test, axis=1, n=self.differential_n)
 
                 x_non_lag_train, x_non_lag_test, _, _ = split_series(_non_lag_fea, _tar, self.input_features,
                                                                      self.output_features, train_size=self.train_size)
@@ -99,6 +107,9 @@ class GBRTPreprocessing:
             split_tar = lag_splits(
                 _tar, window_size=self.input_features, skip_steps=1, pred_steps=1
             )[:-self.output_features]
+
+            if self.differential_n > 0:
+                split_tar = np.diff(split_tar, axis=1, n=self.differential_n)
 
             split_non_lag_fea = lag_splits(
                 _non_lag_fea, window_size=self.input_features, skip_steps=1, pred_steps=1

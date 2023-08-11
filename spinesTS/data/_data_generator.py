@@ -1,6 +1,8 @@
 from typing import *
-import numpy as np
 import copy
+
+import numpy as np
+
 
 
 class DataGenerator:

@@ -7,4 +7,5 @@ from ._data_reader import (
     LoadSupermarketIncoming,
     BuiltInSeriesData
 )
+from ._data_base import DataTS
 

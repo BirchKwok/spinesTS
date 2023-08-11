@@ -10,7 +10,7 @@ class DataTS(pd.DataFrame):
     def __init__(self, dataset, index=None, columns=None, dtype=None, name=None):
         super().__init__(data=dataset, index=index, columns=columns, dtype=dtype)
 
-        self.dataset_name = name or 'spinesTS.DataTS'
+        self.dataset_name = name or 'spinesTS.data.DataTS'
 
     def __str__(self):
         return f"{self.dataset_name} dataset, shape={self.shape}, head_data=\n{self.head()}"
