@@ -11,16 +11,17 @@ from spinesTS.features_generator import date_features
 
 class GBRTPreprocessing:
     """WideGBRT features engineering class"""
-    def __init__(self, input_features, output_features, target_col,
+    def __init__(self, in_features, out_features, target_col,
                  train_size=0.8, date_col=None, differential_n=1):
         self.cf = None
-        self.input_features = input_features
-        self.output_features = output_features
+        self.input_features = in_features
+        self.output_features = out_features
         self.target_col = target_col
         self.train_size = train_size
         self.date_col = date_col
         assert isinstance(differential_n, int) and differential_n >= 0
         self.differential_n = differential_n
+        self.x_shape = None
 
         self.__spinesTS_is_fitted__ = False
 
@@ -41,7 +42,7 @@ class GBRTPreprocessing:
 
     def fit(self, x):
         self.check_x_types(x)
-
+        self.x_shape = x.shape
         self.__spinesTS_is_fitted__ = True
         return self
 
@@ -64,6 +65,9 @@ class GBRTPreprocessing:
         check_is_fitted(self)
 
         self.check_x_types(x)
+
+        if x.shape != self.x_shape:
+            raise ValueError("data shape does not match the shape of the data at the time of fitting.")
 
         if isinstance(x, pd.DataFrame):
             if self.date_col is not None:
