@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 
 import torch
 from torch import nn
@@ -130,12 +130,12 @@ class StackingRNN(TorchModelMixin):
             X_train: Any,
             y_train: Any,
             epochs: int = 1000,
-            batch_size: str = 'auto',
+            batch_size: Union[str, int] = 'auto',
             eval_set: Any = None,
             monitor: str = 'val_loss',
             min_delta: int = 0,
             patience: int = 10,
-            lr_scheduler: str = 'ReduceLROnPlateau',
+            lr_scheduler: Union[str, None] = 'ReduceLROnPlateau',
             lr_scheduler_patience: int = 10,
             lr_factor: float = 0.7,
             restore_best_weights: bool = True,
