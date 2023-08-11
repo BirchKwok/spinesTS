@@ -1,9 +1,26 @@
 # spinesTS (spines for Time Series)
 spinesTS is a powerful Toolsets for time series.
+
+- [Install](https://github.com/BirchKwok/spinesTS#install)
+- [spinesTS Modules](https://github.com/BirchKwok/spinesTS#spinests-modules)
+- [Tutorials](https://github.com/BirchKwok/spinesTS#tutorials)
+  - [Getting started](https://github.com/BirchKwok/spinesTS#getting-started)
+  - [Using nn module](https://github.com/BirchKwok/spinesTS#using-nn-module)
+    - [StackingRNN](https://github.com/BirchKwok/spinesTS#StackingRNN)
+    - [GAUNet](https://github.com/BirchKwok/spinesTS#GAUNet)
+    - [Time2VecNet](https://github.com/BirchKwok/spinesTS#Time2VecNet)
+  - [Using ml_model module](https://github.com/BirchKwok/spinesTS#using-ml_model-module)
+    - [MultiStepRegressor](https://github.com/BirchKwok/spinesTS#MultiStepRegressor)
+    - [MultiOutputRegressor](https://github.com/BirchKwok/spinesTS#MultiOutputRegressor)
+    - [WideGBRT](https://github.com/BirchKwok/spinesTS#WideGBRT)
+  - [Datasets](https://github.com/BirchKwok/spinesTS#Datasets)
+
+
 ## Install
 ```
 pip install spinesTS
 ```
+
 ## spinesTS Modules
 
 - base: Model base class
@@ -78,7 +95,7 @@ r2_score is 0.8186046606725977
 ![model prediction image](https://github.com/BirchKwok/spinesTS/blob/main/examples/visual/GettingStarted.png)
 
 ### Using nn module
-- **StackingRNN**
+#### StackingRNN
 ```python
 import matplotlib.pyplot as plt
 
@@ -122,7 +139,7 @@ print(f"mape: {mean_absolute_percentage_error(y_test[-2:], y_pred_cs)}")
 a = plot2d(y_test[-2:], y_pred_cs, eval_slices='[-1]', labels=['y_test', 'y_pred'], figsize=(20, 6))
 plt.show()
 ```
-- **GAUNet**
+#### GAUNet
 ```python
 import matplotlib.pyplot as plt
 
@@ -165,7 +182,7 @@ print(f"mape: {mean_absolute_percentage_error(y_test[-2:], y_pred_cs)}")
 a = plot2d(y_test[-2:], y_pred_cs, eval_slices='[-1]', labels=['y_test', 'y_pred'], figsize=(20, 6))
 plt.show()
 ```
-- **Time2VecNet**
+#### Time2VecNet
 ```python
 import matplotlib.pyplot as plt
 
