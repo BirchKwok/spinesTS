@@ -25,7 +25,8 @@ setup(
         'scipy>=1.7.0',
         'numpy>=1.17.0',
         'pandas>=1.0.0',
-        'tabulate>=0.8'
+        'tabulate>=0.8',
+        'matplotlib>=3.5.1'
     ],
     zip_safe=False,
     include_package_data=True

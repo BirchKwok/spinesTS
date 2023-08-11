@@ -5,7 +5,7 @@ from ._data_reader import (
     LoadMessagesSentDataSets,
     LoadWebSales,
     LoadSupermarketIncoming,
-    DataReader,
     BuiltInSeriesData
 )
+from ._data_base import DataTS
 

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+
 from spinesTS.layers import Time2Vec
 from spinesTS.base import TorchModelMixin
 
@@ -43,8 +44,8 @@ class T2V(nn.Module):
 
 
 class Time2VecNet(TorchModelMixin):
-    def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01, random_seed=42):
-        super(Time2VecNet, self).__init__(random_seed)
+    def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01, random_seed=42, device=None):
+        super(Time2VecNet, self).__init__(random_seed, device=device)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.flip_features = flip_features

@@ -14,19 +14,13 @@
 # Dev branch marker is: 'X.Y.dev' or 'X.Y.devN' where N is an integer.
 # 'X.Y.dev0' is the canonical version of 'X.Y.dev'
 #
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
-
-__all__ = [
-    'base', 'data', 'features_extractor', 'layers', 'ml_model', 'nn',
-    'pipeline', 'plotting', 'preprocessing', 'utils', 'metrics',
-    'callbacks'
-]
 
 from . import (
     base,
     data,
-    features_extractor,
+    features_generator,
     layers,
     ml_model,
     nn,

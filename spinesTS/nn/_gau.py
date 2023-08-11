@@ -2,6 +2,7 @@ from typing import Any
 
 import torch
 from torch import nn
+
 from spinesTS.layers import GAU
 from spinesTS.base import TorchModelMixin
 

@@ -34,7 +34,7 @@ class Pipeline(MLModelMixin):
         assert 0 < len(steps) == np.sum([isinstance(i, tuple) for i in steps])
 
         self._names, self._estimators = zip(*steps)
-        self._model = self._estimators[-1]
+        self._estimator = self._estimators[-1]
         # validate steps
         self._validate_steps()
 
@@ -72,7 +72,7 @@ class Pipeline(MLModelMixin):
         for t in range(len(self._estimators[:-1])):
             x = self._estimators[t].transform(x)
 
-        return self._model.predict(x, **kwargs)
+        return self._estimator.predict(x, **kwargs)
 
     def get_params(self):
         return copy.deepcopy(self._order_steps)
@@ -80,7 +80,7 @@ class Pipeline(MLModelMixin):
     def _validate_steps(self):
 
         transformers = self._estimators[:-1]
-        estimator = self._model
+        estimator = self._estimator
 
         for t in transformers:
             if t is None:

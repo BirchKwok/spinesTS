@@ -1,13 +1,14 @@
+import copy
+import warnings
+
 import numpy as np
 from joblib import Parallel, delayed
-import copy
-
 from sklearn.multioutput import _MultiOutputEstimator, _fit_estimator
 from sklearn.utils.validation import _check_fit_params
 
 from spinesTS.base import MLModelMixin
 from spinesTS.utils import func_has_params, check_is_fitted
-import warnings
+
 
 warnings.filterwarnings('ignore')
 
@@ -27,18 +28,35 @@ class MultiStepRegressor(MLModelMixin):
     """
 
     def __init__(self, estimator):
-        self._model = estimator
+        self._estimator = estimator
         self._forward = 1
         self.__spinesTS_is_fitted__ = False
 
-    def fit(self, x, y, eval_set=None, **kwargs):
+    def fit(self, x, y, eval_set=None, **estimator_fit_kwargs):
         assert np.ndim(y) <= 2
+        if eval_set is not None:
+            if len(eval_set) == 2 or len(eval_set[0]) == 2:
+                if len(eval_set[0]) == 2:
+                    eval_set = eval_set[0]
+            else:
+                raise ValueError("The eval_set must be [X, y] or [(X, y)]")
+
         self._forward = y.shape[1]
         _ = y
         if np.ndim(y) == 2:
+            assert np.ndim(y) <= 2
             _ = y[:, 0]
 
-        self._model = self._fit(x, _, eval_set=eval_set, **kwargs)
+        if func_has_params(self._estimator.fit, "eval_set") and eval_set is not None:
+
+            try:
+                eval_sets_ = (eval_set[0], eval_set[1][:, 0])
+                self._fit(x, _, eval_set=eval_sets_, **estimator_fit_kwargs)
+            except Exception:
+                eval_sets_ = [(eval_set[0], eval_set[1][:, 0])]
+                self._fit(x, _, eval_set=eval_sets_, **estimator_fit_kwargs)
+        else:
+            self._fit(x, _, **estimator_fit_kwargs)
 
         self.__spinesTS_is_fitted__ = True
         return self
@@ -49,7 +67,7 @@ class MultiStepRegressor(MLModelMixin):
         res = []
         eval_x = copy.deepcopy(x)
         for step in range(self._forward):  # forward n steps
-            _ = np.squeeze(self._model.predict(eval_x, **kwargs))
+            _ = np.squeeze(self._estimator.predict(eval_x, **kwargs))
             res.append(_)
             eval_x = np.concatenate([eval_x[:, 1:], np.transpose(_.reshape(1, -1))], axis=1)
             assert x.shape == eval_x.shape
