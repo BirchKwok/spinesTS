@@ -10,8 +10,8 @@
     - [GAUNet](https://github.com/BirchKwok/spinesTS#gaunet)
     - [Time2VecNet](https://github.com/BirchKwok/spinesTS#time2vecnet)
   - [Using ml_model module](https://github.com/BirchKwok/spinesTS#using-ml_model-module)
-    - [MultiStepRegressor](https://github.com/BirchKwok/spinesTS#multiStepregressor)
-    - [MultiOutputRegressor](https://github.com/BirchKwok/spinesTS#MultiOutputRegressor)
+    - [MultiStepRegressor](https://github.com/BirchKwok/spinesTS#multistepregressor)
+    - [MultiOutputRegressor](https://github.com/BirchKwok/spinesTS#multioutputregressor)
     - [WideGBRT](https://github.com/BirchKwok/spinesTS#widegbrt)
   - [Using Data module](https://github.com/BirchKwok/spinesTS#using-data-module)
 
