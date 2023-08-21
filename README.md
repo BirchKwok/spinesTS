@@ -6,14 +6,14 @@
 - [Tutorials](https://github.com/BirchKwok/spinesTS#tutorials)
   - [Getting started](https://github.com/BirchKwok/spinesTS#getting-started)
   - [Using nn module](https://github.com/BirchKwok/spinesTS#using-nn-module)
-    - [StackingRNN](https://github.com/BirchKwok/spinesTS#StackingRNN)
-    - [GAUNet](https://github.com/BirchKwok/spinesTS#GAUNet)
-    - [Time2VecNet](https://github.com/BirchKwok/spinesTS#Time2VecNet)
+    - [StackingRNN](https://github.com/BirchKwok/spinesTS#stackingrnn)
+    - [GAUNet](https://github.com/BirchKwok/spinesTS#gaunet)
+    - [Time2VecNet](https://github.com/BirchKwok/spinesTS#time2vecnet)
   - [Using ml_model module](https://github.com/BirchKwok/spinesTS#using-ml_model-module)
-    - [MultiStepRegressor](https://github.com/BirchKwok/spinesTS#MultiStepRegressor)
+    - [MultiStepRegressor](https://github.com/BirchKwok/spinesTS#multiStepregressor)
     - [MultiOutputRegressor](https://github.com/BirchKwok/spinesTS#MultiOutputRegressor)
-    - [WideGBRT](https://github.com/BirchKwok/spinesTS#WideGBRT)
-  - [Using Data module](https://github.com/BirchKwok/spinesTS#Using-Data-module)
+    - [WideGBRT](https://github.com/BirchKwok/spinesTS#widegbrt)
+  - [Using Data module](https://github.com/BirchKwok/spinesTS#using-data-module)
 
 
 ## Install
