@@ -1,4 +1,6 @@
 from ._data_generator import DataGenerator, RandomEventGenerator
+from .base import DataTS
+
 from ._data_reader import (
     LoadElectricDataSets,
     LoadMessagesSentHourDataSets,
@@ -7,5 +9,5 @@ from ._data_reader import (
     LoadSupermarketIncoming,
     BuiltInSeriesData
 )
-from ._data_base import DataTS
+
 

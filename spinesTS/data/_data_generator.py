@@ -4,7 +4,6 @@ import copy
 import numpy as np
 
 
-
 class DataGenerator:
     """Generate timeseries-like data
 

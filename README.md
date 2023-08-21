@@ -1,5 +1,5 @@
-# spinesTS (spines for Time Series)
-spinesTS is a powerful Toolsets for time series.
+# spinesTS 
+## Time Series forecasting toolsets
 
 - [Install](https://github.com/BirchKwok/spinesTS#install)
 - [spinesTS Modules](https://github.com/BirchKwok/spinesTS#spinests-modules)
@@ -13,7 +13,7 @@ spinesTS is a powerful Toolsets for time series.
     - [MultiStepRegressor](https://github.com/BirchKwok/spinesTS#MultiStepRegressor)
     - [MultiOutputRegressor](https://github.com/BirchKwok/spinesTS#MultiOutputRegressor)
     - [WideGBRT](https://github.com/BirchKwok/spinesTS#WideGBRT)
-  - [Datasets](https://github.com/BirchKwok/spinesTS#Datasets)
+  - [Using Data module](https://github.com/BirchKwok/spinesTS#Using-Data-module)
 
 
 ## Install
@@ -39,7 +39,7 @@ pip install spinesTS
 
 ### Getting started
 ```python
-# simple demo to predict supermarket daily incoming
+# simple demo to predict Electric data
 from sklearn.preprocessing import StandardScaler
 from lightgbm import LGBMRegressor
 import matplotlib.pyplot as plt
@@ -60,7 +60,7 @@ x_train, x_test, y_train, y_test = split_series(
     y_seq=df['value'],  # The sequence of parameter y_seq is cut based on parameter x_seq
     # sliding window size, every 30 before days to predict after days
     window_size=30, 
-    # predict after 30 days goods incoming
+    # predict after 30 days
     pred_steps=30, 
     train_size=0.8
 )
@@ -113,9 +113,9 @@ df = LoadElectricDataSets()
 x_train, x_test, y_train, y_test = split_series(
     x_seq=df['value'], 
     y_seq=df['value'],
-    # sliding window size, every 30 before days to predict after days
+    # sliding window size, every 128 before days to predict after days
     window_size=128, 
-    # predict after 30 days goods incoming
+    # predict after 24 days goods incoming
     pred_steps=24, 
     train_size=0.8
 )
@@ -125,6 +125,7 @@ print(f"x_train shape is {x_train.shape}, "
       f"y_train shape is {y_train.shape},"
       f"y_test shape is {y_test.shape}")
 
+# model initialization
 model = StackingRNN(in_features=128, out_features=24, 
                     random_seed=42, loss_fn='mae', 
                     learning_rate=0.001, dropout=0.1, diff_n=1, 
@@ -157,9 +158,9 @@ df = LoadElectricDataSets()
 x_train, x_test, y_train, y_test = split_series(
     x_seq=df['value'], 
     y_seq=df['value'],
-    # sliding window size, every 30 before days to predict after days
+    # sliding window size, every 128 before days to predict after days
     window_size=128, 
-    # predict after 30 days goods incoming
+    # predict after 24 days 
     pred_steps=24, 
     train_size=0.8
 )
@@ -169,6 +170,7 @@ print(f"x_train shape is {x_train.shape}, "
       f"y_train shape is {y_train.shape},"
       f"y_test shape is {y_test.shape}")
 
+# model initialization
 model = GAUNet(in_features=128, out_features=24, 
                random_seed=42, flip_features=False, 
                learning_rate=0.001, level=5, device='cpu')
@@ -200,9 +202,9 @@ df = LoadElectricDataSets()
 x_train, x_test, y_train, y_test = split_series(
     x_seq=df['value'], 
     y_seq=df['value'],
-    # sliding window size, every 30 before days to predict after days
+    # sliding window size, every 128 before days to predict after days
     window_size=128, 
-    # predict after 30 days goods incoming
+    # predict after 24 days 
     pred_steps=24, 
     train_size=0.8
 )
@@ -212,6 +214,7 @@ print(f"x_train shape is {x_train.shape}, "
       f"y_train shape is {y_train.shape},"
       f"y_test shape is {y_test.shape}")
 
+# model initialization
 model = Time2VecNet(in_features=128, out_features=24, 
                random_seed=42, flip_features=False, 
                learning_rate=0.001, device='cpu')
@@ -227,7 +230,7 @@ plt.show()
 ```
 
 ### Using ml_model module
-- **MultiStepRegressor**
+#### MultiStepRegressor
 ```python
 from lightgbm import LGBMRegressor
 import matplotlib.pyplot as plt
@@ -247,7 +250,7 @@ x_train, x_test, y_train, y_test = split_series(
     df['value'],
     # sliding window size, every 30 before days to predict after days
     window_size=30, 
-    # predict after 30 days goods incoming
+    # predict after 30 days 
     pred_steps=30, 
     train_size=0.8
 )
@@ -257,7 +260,7 @@ print(f"x_train shape is {x_train.shape}, "
       f"y_train shape is {y_train.shape},"
       f"y_test shape is {y_test.shape}")
 
-# Assemble the model using Pipeline class
+# model initialization
 model = MultiStepRegressor(LGBMRegressor(random_state=2022))
 print("Model successfully initialization...")
 
@@ -270,7 +273,7 @@ fig = plot2d(y_test, model.predict(x_test), figsize=(20, 10),
        eval_slices='[:30]', labels=['y_test', 'y_pred'])
 plt.show()
 ```
-- **MultiOutputRegressor**
+#### MultiOutputRegressor
 ```python
 from lightgbm import LGBMRegressor
 import matplotlib.pyplot as plt
@@ -290,7 +293,7 @@ x_train, x_test, y_train, y_test = split_series(
     df['value'],
     # sliding window size, every 30 before days to predict after days
     window_size=30, 
-    # predict after 30 days goods incoming
+    # predict after 30 days 
     pred_steps=30, 
     train_size=0.8
 )
@@ -300,7 +303,7 @@ print(f"x_train shape is {x_train.shape}, "
       f"y_train shape is {y_train.shape},"
       f"y_test shape is {y_test.shape}")
 
-# Assemble the model using Pipeline class
+# model initialization
 model = MultiOutputRegressor(LGBMRegressor(random_state=2022))
 print("Model successfully initialization...")
 
@@ -313,14 +316,13 @@ fig = plot2d(y_test, model.predict(x_test), figsize=(20, 10),
        eval_slices='[:30]', labels=['y_test', 'y_pred'])
 plt.show()
 ```
-- **WideGBRT**
+#### WideGBRT
 ```python
 from lightgbm import LGBMRegressor
 import matplotlib.pyplot as plt
 
 from spinesTS.data import LoadElectricDataSets
 from spinesTS.ml_model import GBRTPreprocessing, WideGBRT
-from spinesTS.preprocessing import split_series
 from spinesTS.plotting import plot2d
 
 
@@ -341,7 +343,7 @@ print(f"x_train shape is {x_train.shape}, "
       f"y_train shape is {y_train.shape},"
       f"y_test shape is {y_test.shape}")
 
-# Assemble the model using Pipeline class
+# model initialization
 model = WideGBRT(model=LGBMRegressor(random_state=2022))
 print("Model successfully initialization...")
 
@@ -355,7 +357,7 @@ fig = plot2d(y_test, model.predict(x_test), figsize=(20, 10),
 plt.show()
 ```
 
-### Datasets
+### Using Data module
 ```python
 from spinesTS.data import *
 series_data = BuiltInSeriesData(print_file_list=True)

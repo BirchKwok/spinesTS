@@ -1,18 +1,25 @@
 import torch
 from torch import nn
 
-from spinesTS.layers import Time2Vec
+from spinesTS.layers import Time2Vec, MoveAvg
 from spinesTS.base import TorchModelMixin
 
 
 class T2V(nn.Module):
-    def __init__(self, in_shapes, out_features, flip_features=False):
+    def __init__(self, in_shapes, out_features, flip_features=False, ma_window_size=3):
         super(T2V, self).__init__()
+        assert isinstance(ma_window_size, int)
         self.in_shape_type = type(in_shapes)
         if self.in_shape_type == tuple:
             rows, self.in_features = in_shapes
         else:
             self.in_features, self.out_features = in_shapes, out_features
+
+        if ma_window_size > 0:
+            self.in_features = self.in_features - ma_window_size + 2
+            self.move_avg = MoveAvg(kernel_size=ma_window_size)
+        else:
+            self.move_avg = lambda s: s
 
         self.t2v = Time2Vec(self.in_features)
         if flip_features:
@@ -29,6 +36,7 @@ class T2V(nn.Module):
         self.flip_features = flip_features
 
     def forward(self, x):
+        x = self.move_avg(x)
         x1 = self.t2v(x)
         if self.flip_features:
             _x = x.clone()
@@ -44,15 +52,18 @@ class T2V(nn.Module):
 
 
 class Time2VecNet(TorchModelMixin):
-    def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01, random_seed=42, device=None):
+    def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01,
+                 random_seed=42, device=None, ma_window_size=3):
         super(Time2VecNet, self).__init__(random_seed, device=device)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.flip_features = flip_features
+        self.ma_window_size = ma_window_size
         self.model, self.loss_fn, self.optimizer = self.call()
 
     def call(self):
-        model = T2V(self.in_features, self.out_features, flip_features=self.flip_features)
+        model = T2V(self.in_features, self.out_features, flip_features=self.flip_features,
+                    ma_window_size=self.ma_window_size)
         loss_fn = nn.HuberLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer

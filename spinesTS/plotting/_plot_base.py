@@ -6,16 +6,17 @@ from matplotlib.figure import Figure
 
 
 def plot1d(*S: Sequence, x: Optional[Sequence] = None,
+           title=None,
            labels: Optional[Sequence] = None,
            figsize: Sequence = (12, 8),
-           legend: bool = True) -> Figure:
+           legend: bool = True, linestyle='-') -> Figure:
     """Plot series, accept one dim array-like sequence
 
     Parameters
     ----------
     S: array-like series, which to plot.
     x: None or array-like series, x-axis.
-    labels: None or List[str], figure-label.
+    labels: None or List[str] or str-type, figure-label.
     figsize: tuple of integers, figure size
     legend: bool, whether to show the figure legend
 
@@ -24,21 +25,30 @@ def plot1d(*S: Sequence, x: Optional[Sequence] = None,
     matplotlib.figure.Figure
     """
     fig = plt.figure(figsize=figsize)
-    for i in range(len(S)):
+    ax = fig.add_subplot(111)
+
+    ax.set_title(title)
+    seq_len = len(S)
+
+    for i in range(seq_len):
         if labels is not None:
-            label = labels[i]
+            if isinstance(labels, str):
+                label = labels
+            else:
+                assert len(labels) == seq_len, "labels length must be equals to sequence length when labels is a list"
+                label = labels[i]
         else:
             label = 'label_' + str(i + 1)
 
         if x is None:
-            plt.plot(S[i], label=label)
+            ax.plot(S[i], label=label, linestyle=linestyle)
         else:
-            plt.plot(x, S[i], label=label)
+            ax.plot(x, S[i], label=label, linestyle=linestyle)
 
         if legend:
-            plt.legend()
+            ax.legend()
 
-    return fig
+    return ax
 
 
 def plot2d(*S: Sequence, x: Optional[Sequence] = None,

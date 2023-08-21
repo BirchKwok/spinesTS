@@ -171,11 +171,13 @@ class ContinuousFeatureGenerator:
             return np.concatenate([x, *[i[0] for i in res]], axis=-1)
 
 
-def date_features(x, date_col, drop_date_col=True):
+def date_features(x, date_col, drop_date_col=True, format=None):
     """Date features generation"""
     assert isinstance(x, pd.DataFrame)
 
-    ds_col = pd.to_datetime(x[date_col])
+    ds_col = pd.to_datetime(x[date_col], format=format)
+    x['hour'] = ds_col.dt.hour
+    x['minute'] = ds_col.dt.minute
     x['weekday_1'] = ds_col.dt.weekday
     x['day_1'] = ds_col.dt.day
     x['week_1'] = ds_col.dt.week

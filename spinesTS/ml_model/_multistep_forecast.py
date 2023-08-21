@@ -6,14 +6,14 @@ from joblib import Parallel, delayed
 from sklearn.multioutput import _MultiOutputEstimator, _fit_estimator
 from sklearn.utils.validation import _check_fit_params
 
-from spinesTS.base import MLModelMixin
+from spinesTS.base import ForecastingMixin
 from spinesTS.utils import func_has_params, check_is_fitted
 
 
 warnings.filterwarnings('ignore')
 
 
-class MultiStepRegressor(MLModelMixin):
+class MultiStepRegressor(ForecastingMixin):
     """Use the last predict-step value as the last step true value,
         to predict current step value,
         and repeat this until it reaches y.shape[1] times.
@@ -51,12 +51,12 @@ class MultiStepRegressor(MLModelMixin):
 
             try:
                 eval_sets_ = (eval_set[0], eval_set[1][:, 0])
-                self._fit(x, _, eval_set=eval_sets_, **estimator_fit_kwargs)
+                self._estimator.fit(x, _, eval_set=eval_sets_, **estimator_fit_kwargs)
             except Exception:
                 eval_sets_ = [(eval_set[0], eval_set[1][:, 0])]
-                self._fit(x, _, eval_set=eval_sets_, **estimator_fit_kwargs)
+                self._estimator.fit(x, _, eval_set=eval_sets_, **estimator_fit_kwargs)
         else:
-            self._fit(x, _, **estimator_fit_kwargs)
+            self._estimator.fit(x, _, **estimator_fit_kwargs)
 
         self.__spinesTS_is_fitted__ = True
         return self
@@ -77,7 +77,7 @@ class MultiStepRegressor(MLModelMixin):
         return np.squeeze(np.transpose(r))
 
 
-class MultiOutputRegressor(MLModelMixin, _MultiOutputEstimator):
+class MultiOutputRegressor(ForecastingMixin, _MultiOutputEstimator):
     """Fitting one regressor per target.
 
     Parameters

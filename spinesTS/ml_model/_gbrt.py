@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from spinesTS.base import MLModelMixin
+from spinesTS.base import ForecastingMixin
 from spinesTS.ml_model import MultiOutputRegressor
 from spinesTS.utils import check_is_fitted
 from spinesTS.pipeline import Pipeline
@@ -122,7 +122,7 @@ class GBRTPreprocessing:
             return np.concatenate((split_tar, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
 
 
-class WideGBRT(MLModelMixin):
+class WideGBRT(ForecastingMixin):
     def __init__(self, model, scaler=None):
         if scaler:
             multi_reg = Pipeline([

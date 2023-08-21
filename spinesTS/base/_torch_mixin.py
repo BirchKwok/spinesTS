@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 
-from spinesTS.metrics import mean_absolute_error
+from spinesTS.metrics import WMAPELoss, mean_absolute_error as mae, RMSELoss
 from spinesTS.utils import seed_everything, check_is_fitted
 
 
@@ -39,7 +39,9 @@ def set_device(device=None):
 
 def get_loss_func(name):
     assert isinstance(name, str)
-    names = {'huber': nn.HuberLoss(), 'mse': nn.MSELoss(), 'mae': nn.L1Loss()}
+    name = name.lower()
+    names = {'huber': nn.HuberLoss(), 'mse': nn.MSELoss(), 'mae': nn.L1Loss(),
+             'wmape': WMAPELoss(), 'rmse': RMSELoss()}
     return names[name]
 
 
@@ -89,11 +91,25 @@ class TorchModelMixin:
 
     """
 
-    def __init__(self, seed=None, device=None, loss_fn='mse') -> None:
+    def __init__(self, seed=None, device=None, loss_fn='mae') -> None:
+        self.training_logs = {
+            'time_cost': [],
+            'epochs': [],
+            'batches': [],
+            'lrs': [],
+            'train_loss': [],
+            'train_accuracy': [],
+            'test_loss': [],
+            'test_accuracy': [],
+            'current_p':[]
+        }
+
         seed_everything(seed)
         self.device = set_device(device)
         self.loss_fn_name = loss_fn
         self.loss_fn = get_loss_func(loss_fn)
+        self.current_patience = 0
+
         self.__spinesTS_is_fitted__ = False
 
     def call(self, *args, **kwargs):
@@ -195,7 +211,7 @@ class TorchModelMixin:
         return obj
 
     def metric(self, y_true, y_pred):
-        return mean_absolute_error(y_true, y_pred)
+        return mae(y_true, y_pred)
 
     def _get_batch_size(self, x, batch_size='auto'):
         if batch_size == 'auto':
@@ -318,6 +334,78 @@ class TorchModelMixin:
 
         return False
 
+    def _get_lr_scheduler(
+            self, mode=None,
+            lr_scheduler='ReduceLROnPlateau',
+            lr_scheduler_patience=10,
+            lr_factor=0.1,
+            **lr_scheduler_kwargs
+    ):
+        if lr_scheduler == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer,
+                mode=mode,
+                patience=lr_scheduler_patience, factor=lr_factor, **lr_scheduler_kwargs
+            )
+        elif lr_scheduler == 'CosineAnnealingLR':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=5, eta_min=0,
+                                                                   **lr_scheduler_kwargs)
+        elif lr_scheduler == 'CosineAnnealingWarmRestarts':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=5, T_mult=2,
+                                                                             **lr_scheduler_kwargs)
+        elif lr_scheduler is None:
+            return None
+        else:
+            raise KeyError(f"{lr_scheduler} is invalid.")
+
+        return scheduler
+
+    def print_training_log(self, init_lr, metrics_name, total_epochs):
+        training_log_print = OrderedDict({
+            "epoch_msg": "",
+            "current_p_msg": "",
+            "lr_msg": "",
+            "loss_msg": "",
+            "val_loss_msg": "",
+            "time_msg": ""
+        })
+        training_log_print["epoch_msg"] = f"Epoch {self.training_logs['epochs'][-1] + 1:>1d}/" + \
+                                          f"{total_epochs:>1d}  " + \
+                                          f"\n\r{self.training_logs['batches'][-1]}/{self.training_logs['batches'][-1]}"
+
+        training_log_print["lr_msg"] = f"[*lr: {round(self.training_logs['lrs'][-1], 5)}]" if len(
+            str(self.training_logs['lrs'][-1])) <= 5 else f" [*lr: {self.training_logs['lrs'][-1]:>5}]"
+
+        training_log_print["loss_msg"] = f"loss: {self.training_logs['train_loss'][-1]:>.4f} - " + \
+                                         f"{metrics_name}: {self.training_logs['train_accuracy'][-1]:>.4f}"
+
+        training_log_print[
+            "val_loss_msg"
+        ] = f"val_loss: {self.training_logs['test_loss'][-1]:>.4f} - " + \
+            f"val_{metrics_name}: {self.training_logs['test_accuracy'][-1]:>.4f}"
+
+        training_log_print["time_msg"] = \
+            f"{self.training_logs['time_cost'][-1]:>.2f}s/epoch - " + \
+            f"{self.training_logs['time_cost'][-1] / self.training_logs['batches'][-1]:>.3f}s/step"
+
+        training_log_print["current_p_msg"] = f"p{self.training_logs['current_p'][-1]}"
+
+        if round(self.training_logs['lrs'][-1], 5) == init_lr:
+            del training_log_print['lr_msg']
+        metric_string = ' - '.join([i for i in training_log_print.values()])
+
+        return metric_string
+
+    @staticmethod
+    def _check_eval_set_params(eval_set):
+        if isinstance(eval_set, tuple):
+            assert len(eval_set) == 2
+        elif isinstance(eval_set, list):
+            assert len(eval_set[0]) == 2
+            eval_set = eval_set[0]
+
+        return eval_set
+
     def _fit(
             self,
             X,
@@ -345,14 +433,12 @@ class TorchModelMixin:
         assert eval_set is None or isinstance(eval_set, (list, tuple))
         assert monitor in ('loss', 'val_loss', None)
 
-        if isinstance(eval_set, tuple):
-            assert len(eval_set) == 2
-        elif isinstance(eval_set, list):
-            assert len(eval_set[0]) == 2
-            eval_set = eval_set[0]
+        init_lr = copy.deepcopy(self.learning_rate)
 
         self.model = self._move_to_device(self.model)
         X, y = self._check_x_y_type(X, y)
+
+        eval_set = self._check_eval_set_params(eval_set)
 
         self._get_batch_size(X, batch_size=batch_size)
         train_dataloader = self.data_loader(X, y)
@@ -361,59 +447,37 @@ class TorchModelMixin:
         if eval_set is not None:
             test_dataloader = self.data_loader(*self._check_x_y_type(eval_set[0], eval_set[1]))
 
-        self.current_patience = 0
         self.current_loss = np.finfo(np.float64).max - min_delta
         self.best_weight = copy.deepcopy(self.model.state_dict())
 
         batches = int(np.ceil(len(X) / self._batch_size))
 
-        if lr_scheduler == 'ReduceLROnPlateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                self.optimizer,
-                mode=('max', 'min')[loss_type == 'down'],
-                patience=lr_scheduler_patience, factor=lr_factor, **lr_scheduler_kwargs
-            )
-        elif lr_scheduler == 'CosineAnnealingLR':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=5, eta_min=0,
-                                                                   **lr_scheduler_kwargs)
-        elif lr_scheduler == 'CosineAnnealingWarmRestarts':
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=5, T_mult=2,
-                                                                             **lr_scheduler_kwargs)
-        elif lr_scheduler is None:
-            pass
-        else:
-            raise KeyError(f"{lr_scheduler} is invalid.")
+        mode = ('max', 'min')[loss_type == 'down']
 
-        training_log_print = OrderedDict({
-            "epoch_msg": "",
-            "current_p_msg": "",
-            "lr_msg": "",
-            "loss_msg": "",
-            "val_loss_msg": "",
-            "time_msg": ""
-        })
+        scheduler = self._get_lr_scheduler(
+            mode=mode, lr_scheduler=lr_scheduler,
+            lr_scheduler_patience=lr_scheduler_patience,
+            lr_factor=lr_factor,
+            **lr_scheduler_kwargs)
 
         for epoch in range(epochs):
             tik = time.time()
             stop_state = False
 
-            training_log_print["epoch_msg"] = f"Epoch {epoch + 1:>1d}/{epochs:>1d}  Loss_Fn {self.loss_fn_name}\n " \
-                                              f"\r{batches}/{batches}"
+            self.training_logs['epochs'].append(epoch)
+            self.training_logs['batches'].append(batches)
 
             train_loss_current, train_acc = self.train_on_one_epoch(train_dataloader, model=self.model,
                                                                     loss_fn=self.loss_fn,
                                                                     optimizer=self.optimizer)
 
             if lr_scheduler:
-                last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
                 scheduler.step() if lr_scheduler != 'ReduceLROnPlateau' else scheduler.step(train_loss_current)
 
-                if last_lr != self.optimizer.state_dict()['param_groups'][0]['lr']:
-                    last_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
-                    training_log_print["lr_msg"] = f"[*lr: {last_lr:>5}]" if len(
-                        str(last_lr)) <= 5 else f" [*lr: {last_lr:>5}]"
+            self.training_logs['lrs'].append(self.optimizer.state_dict()['param_groups'][0]['lr'])
 
-            training_log_print["loss_msg"] = f"loss: {train_loss_current:>.4f} - {metrics_name}: {train_acc:>.4f}"
+            self.training_logs['train_loss'].append(train_loss_current)
+            self.training_logs['train_accuracy'].append(train_acc)
 
             if monitor == 'loss':
                 stop_state = self._early_stopping(train_loss_current, loss_type=loss_type,
@@ -425,20 +489,18 @@ class TorchModelMixin:
                     stop_state = self._early_stopping(test_loss, loss_type=loss_type, min_delta=min_delta,
                                                       patience=patience, restore_best_weights=restore_best_weights)
 
-                    training_log_print[
-                        "val_loss_msg"
-                    ] = f"val_loss: {test_loss:>.4f} - val_{metrics_name}: {test_acc:>.4f}"
+                    self.training_logs['test_loss'].append(test_loss)
+                    self.training_logs['test_accuracy'].append(test_acc)
 
             if monitor is not None and eval_set is not None:
-                training_log_print["current_p_msg"] = f"p{self.current_patience}"
+                self.training_logs['current_p'].append(self.current_patience)
 
             tok = time.time()
-            training_log_print["time_msg"] = f"{tok - tik:>.2f}s/epoch - {(tok - tik) / batches:>.3f}s/step"
 
-            metric_string = ' - '.join([i for i in training_log_print.values() if len(i) > 0])
+            self.training_logs['time_cost'].append(tok - tik)
 
             if verbose:
-                print(metric_string)
+                print(self.print_training_log(init_lr, metrics_name, epochs))
 
             if stop_state:
                 if verbose:

@@ -1,10 +1,10 @@
 import copy
 from typing import List
 import numpy as np
-from spinesTS.base import MLModelMixin
+from spinesTS.base import ForecastingMixin
 
 
-class Pipeline(MLModelMixin):
+class Pipeline(ForecastingMixin):
     """estimators pipeline """
 
     def __init__(self, steps: List[tuple]):

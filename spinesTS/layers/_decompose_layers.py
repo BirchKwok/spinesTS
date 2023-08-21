@@ -42,21 +42,15 @@ class MoveAvg(nn.Module):
     -------
     torch.Tensor
     """
-    def __init__(self, kernel_size, stride=1, padding='neighbor'):
-        assert padding in ('neighbor', 'valid')
+    def __init__(self, kernel_size, stride=1):
         super(MoveAvg, self).__init__()
         self.kernel_size, self.stride = kernel_size, stride
-        self.padding = padding
         # (, , x.shape[-1] - kernel_size + 1 - stride)
         self.moving_layer = nn.AvgPool1d(kernel_size, stride=stride, padding=0)
 
     def forward(self, x):
         moving_mean = self.moving_layer(x)
-        _ = torch.cat((moving_mean[:, :, -(self.kernel_size - 1 + self.stride - 1):], moving_mean), dim=-1)
-        res = x - _
-        if self.padding == 'neighbor':
-            return res, _
-        return res, moving_mean
+        return torch.concat((moving_mean[:, 0].reshape((-1, 1)), moving_mean), dim=1)
 
 
 class DimensionConv1d(nn.Module):
@@ -83,10 +77,8 @@ class DifferentialLayer(nn.Module):
 
     Parameters
     ----------
-    kernel_size : int, moving average window size
-    stride : int, the jump-step-length in calculating the moving average
-    padding : str, only support to 'same' and 'valid', valid means not to pad, same means padding with
-    the nearest valid value to the null value
+    axis: -1
+    diff_n: 1
     Returns
     -------
     torch.Tensor
