@@ -43,14 +43,7 @@ class BuiltInSeriesData:
     def __init__(self, print_file_list=True):
         self.file_list = sorted(os.listdir(os.path.join(FILE_PATH, './built-in-datasets/')))
         if print_file_list:
-            table = []
-            for i in range(len(self.file_list)):
-                _ = [re.split('\.', self.file_list[i])[0].strip(),
-                     ', '.join(self[i].columns.tolist())]
-                table.append(_)
-
-            print(tabulate(table, headers=["ds name", "columns"], showindex="always",
-                           tablefmt="pretty", colalign=("right", "left", "left")))
+            print(self)
 
     def _load_data(self, fp):
         self._FILEPATH = os.path.join(FILE_PATH, './built-in-datasets/', fp)
@@ -78,6 +71,19 @@ class BuiltInSeriesData:
     def names(self):
         """Returns the built-in series data names-list."""
         return [''.join(i.split('.')[:-1]) for i in self.file_list]
+
+    def __str__(self):
+        table = []
+        for i in range(len(self.file_list)):
+            _ = [re.split('\.', self.file_list[i])[0].strip(),
+                 ', '.join(self[i].columns.tolist())]
+            table.append(_)
+
+        return tabulate(table, headers=["ds name", "columns"], showindex="always",
+                        tablefmt="pretty", colalign=("right", "left", "left"))
+
+    def __repr__(self):
+        return self.__str__()
 
 
 LoadElectricDataSets = _call_name(BuiltInSeriesData(print_file_list=False), 'Electric_Production')

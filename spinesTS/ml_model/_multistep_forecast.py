@@ -2,13 +2,13 @@ import copy
 import warnings
 
 import numpy as np
+import torch
 from joblib import Parallel, delayed
 from sklearn.multioutput import _MultiOutputEstimator, _fit_estimator
 from sklearn.utils.validation import _check_fit_params
 
 from spinesTS.base import ForecastingMixin
 from spinesTS.utils import func_has_params, check_is_fitted
-
 
 warnings.filterwarnings('ignore')
 
@@ -167,3 +167,20 @@ class MultiOutputRegressor(ForecastingMixin, _MultiOutputEstimator):
 
         return self
 
+
+class MultivariableMultiOutputRegressor(ForecastingMixin):
+    """多变量多输出预测"""
+
+    def __init__(self):
+        pass
+
+    def check_x_y(self, x, y):
+        assert isinstance(x, (np.ndarray, torch.Tensor)) and isinstance(y, (np.ndarray, torch.Tensor)), \
+            "only accept numpy.ndarray or torch.Tensor"
+        assert x.ndim == 3
+
+    def fit(self, x, **kwargs):
+        pass
+
+    def predict(self, x, n, **kwargs):
+        pass

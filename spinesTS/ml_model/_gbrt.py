@@ -5,29 +5,37 @@ from spinesTS.base import ForecastingMixin
 from spinesTS.ml_model import MultiOutputRegressor
 from spinesTS.utils import check_is_fitted
 from spinesTS.pipeline import Pipeline
-from spinesTS.preprocessing import split_series, lag_splits
-from spinesTS.features_generator import date_features
+from spinesTS.preprocessing import split_series, lag_splits, moving_average
+from spinesTS.features_generator import date_features, groupby_target_features
 
 
 class GBRTPreprocessing:
     """WideGBRT features engineering class"""
     def __init__(self, in_features, out_features, target_col,
-                 train_size=0.8, date_col=None, differential_n=1):
+                 train_size=0.8, date_col=None, differential_n=0, moving_avg_n=0,
+                 extend_target_features=True
+                 ):
         self.cf = None
         self.input_features = in_features
         self.output_features = out_features
         self.target_col = target_col
         self.train_size = train_size
         self.date_col = date_col
+        self.extend_target_features = extend_target_features
         assert isinstance(differential_n, int) and differential_n >= 0
         self.differential_n = differential_n
+        assert isinstance(moving_avg_n, int) and moving_avg_n >= 0
+        self.moving_avg_n = moving_avg_n
         self.x_shape = None
 
         self.__spinesTS_is_fitted__ = False
 
     def process_date_col(self, x):
         """Processing date column"""
-        return date_features(x, date_col=self.date_col)
+        return date_features(x, date_col=self.date_col, drop_date_col=True)
+
+    def process_target_col(self, x):
+        return groupby_target_features(x, target_col=self.target_col)
 
     def check_x_types(self, x):
         assert isinstance(x, (pd.DataFrame, np.ndarray))
@@ -69,33 +77,46 @@ class GBRTPreprocessing:
         if x.shape != self.x_shape:
             raise ValueError("data shape does not match the shape of the data at the time of fitting.")
 
+        if self.extend_target_features:
+            x = self.process_target_col(x)
+
+        _tar = x[self.target_col].values if isinstance(x, pd.DataFrame) else x[:, self.target_col]
+
         if isinstance(x, pd.DataFrame):
             if self.date_col is not None:
                 x = self.process_date_col(x)
 
-            _non_lag_fea = x.loc[:, ~x.columns.str.contains(self.target_col)].values
+            _non_lag_fea = x.loc[:, [i for i in x.columns if i != self.target_col]].values
         else:
             if self.date_col is not None:
                 x = self.process_date_col(pd.DataFrame(x, columns=range(x.shape[1]))).values
 
             _non_lag_fea = x[:, [i for i in range(x.shape[1]) if i != self.target_col]]
 
-        _tar = x[self.target_col].values if isinstance(x, pd.DataFrame) else x[:, self.target_col]
-
         if mode == 'train':
             if self.train_size is None:
                 x, y = split_series(_tar, _tar, self.input_features, self.output_features, train_size=self.train_size)
+
+                if self.moving_avg_n > 0:
+                    x = moving_average(x, window_size=self.moving_avg_n)
 
                 if self.differential_n > 0:
                     x = np.diff(x, axis=1, n=self.differential_n)
 
                 x_non_lag, _ = split_series(_non_lag_fea, _tar, self.input_features,
                                             self.output_features, train_size=self.train_size)
-
-                return np.concatenate((x, x_non_lag[:, -1, :].squeeze()), axis=1), y
+                if x_non_lag.shape[1] > 0:
+                    return np.concatenate((x, x_non_lag[:, -1, :].squeeze()), axis=1), y
+                else:
+                    return x, y
             else:
                 x_train, x_test, y_train, y_test = split_series(_tar, _tar, self.input_features,
                                                                 self.output_features, train_size=self.train_size)
+
+                if self.moving_avg_n > 0:
+                    x_train = moving_average(x_train, window_size=self.moving_avg_n)
+                    x_test = moving_average(x_test, window_size=self.moving_avg_n)
+
                 if self.differential_n > 0:
                     x_train = np.diff(x_train, axis=1, n=self.differential_n)
                     x_test = np.diff(x_test, axis=1, n=self.differential_n)
@@ -105,12 +126,18 @@ class GBRTPreprocessing:
                 # columns sequence:
                 # lag_1, lag_2, lag_3, ..., lag_n, x_col_1, x_col_2, ..., x_col_n,
                 # date_fea_1, date_fea_2, ..., date_fea_n
-                return np.concatenate((x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
-                    np.concatenate((x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
+                if x_non_lag_train.shape[1] > 0 and x_non_lag_test.shape[1] > 0:
+                    return np.concatenate((x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
+                        np.concatenate((x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
+                else:
+                    return x_train, x_test, y_train, y_test
         else:
             split_tar = lag_splits(
                 _tar, window_size=self.input_features, skip_steps=1, pred_steps=1
             )[:-self.output_features]
+
+            if self.moving_avg_n > 0:
+                split_tar = moving_average(split_tar, window_size=self.moving_avg_n)
 
             if self.differential_n > 0:
                 split_tar = np.diff(split_tar, axis=1, n=self.differential_n)
@@ -119,7 +146,10 @@ class GBRTPreprocessing:
                 _non_lag_fea, window_size=self.input_features, skip_steps=1, pred_steps=1
             )[:-self.output_features]
 
-            return np.concatenate((split_tar, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
+            if split_non_lag_fea.shape[1] > 0:
+                return np.concatenate((split_tar, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
+            else:
+                return split_tar
 
 
 class WideGBRT(ForecastingMixin):

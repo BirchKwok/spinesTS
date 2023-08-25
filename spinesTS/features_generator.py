@@ -3,6 +3,8 @@ import pandas as pd
 from scipy import stats
 from joblib import Parallel, delayed
 from sklearn.linear_model import LinearRegression
+from spinesUtils.feature_tools import vars_threshold, variation_threshold
+
 from spinesTS.utils import check_is_fitted
 from spinesTS.preprocessing import lag_splits
 
@@ -171,20 +173,40 @@ class ContinuousFeatureGenerator:
             return np.concatenate([x, *[i[0] for i in res]], axis=-1)
 
 
-def date_features(x, date_col, drop_date_col=True, format=None):
+def date_features(df, date_col, drop_date_col=True, format=None):
     """Date features generation"""
-    assert isinstance(x, pd.DataFrame)
+    assert isinstance(df, pd.DataFrame)
+    x = df[date_col].copy().to_frame()
 
     ds_col = pd.to_datetime(x[date_col], format=format)
     x['hour'] = ds_col.dt.hour
     x['minute'] = ds_col.dt.minute
     x['weekday_1'] = ds_col.dt.weekday
-    x['day_1'] = ds_col.dt.day
+
     x['week_1'] = ds_col.dt.week
     x['month_1'] = ds_col.dt.month
     x['weekofyear'] = ds_col.dt.weekofyear
     x['quarter_1'] = ds_col.dt.quarter
-    x['dayofyear'] = ds_col.dt.dayofyear
+    x['day_of_week'] = ds_col.dt.dayofweek + 1
+    x['day_of_month'] = ds_col.dt.day
+
+    x['day_of_year'] = ds_col.dt.dayofyear
+
+    def dayofquarter(s):
+        if 1 <= s.month <= 3:
+            return s.dayofyear
+        elif 4 <= s.month <= 6:
+            return s.dayofyear - (pd.to_datetime(str(s.year) + '-03-31') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
+        elif 7 <= s.month <= 9:
+            return s.dayofyear - (pd.to_datetime(str(s.year) + '-06-30') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
+        else:
+            return s.dayofyear - (pd.to_datetime(str(s.year) + '-9-30') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
+
+    x['dayofquarter'] = ds_col.apply(lambda s: dayofquarter(s))
+
+    x['day_to_mid_quarter'] = x['dayofquarter'] - 15
+    x['day_to_start_quarter'] = x['dayofquarter'] - 1
+    x['day_to_end_quarter'] = x['dayofquarter'] - 90
 
     x['daytomonday'] = abs(ds_col.dt.weekday - 1)  # 仅考虑当周周一
     x['daytofriday'] = abs(ds_col.dt.weekday - 5)  # 仅考虑当周周五
@@ -200,17 +222,85 @@ def date_features(x, date_col, drop_date_col=True, format=None):
 
     x['week_of_month'] = ds_col.apply(lambda d: (d.day - 1) // 7 + 1)
     x['week_of_year'] = ds_col.dt.weekofyear
-    x['day_of_week'] = ds_col.dt.dayofweek + 1
     x['year_diff'] = ds_col.dt.year.max() - ds_col.dt.year
     x['is_quarter_start'] = ds_col.dt.is_quarter_start.astype(np.int8)
 
     x['is_year_start'] = ds_col.dt.is_year_start.astype(np.int8)
+    x['is_year_end'] = ds_col.dt.is_year_end.astype(np.int8)
     # 0: Winter - 1: Spring - 2: Summer - 3: Fall
     x["season"] = np.where(ds_col.dt.month.isin([12, 1, 2]), 0, 1)
     x["season"] = np.where(ds_col.dt.month.isin([6, 7, 8]), 2, x["season"])
     x["season"] = pd.Series(np.where(ds_col.dt.month.isin([9, 10, 11]), 3, x["season"])).astype("int8")
 
-    return x if not drop_date_col else x.drop(columns=date_col)
+    to_remove_col_names = list(set(vars_threshold(x) + variation_threshold(x)))
+    to_remove_col_names.append(date_col)
+    if len(to_remove_col_names) > 0:
+        x.drop(columns=to_remove_col_names, inplace=True)
+
+    df = pd.concat((df, x), axis=1)
+    return df if not drop_date_col else df.drop(columns=date_col)
+
+
+def groupby_target_features(df, target_col):
+    """target features"""
+    assert isinstance(df, pd.DataFrame)
+    x = df[target_col].copy().to_frame()
+
+    days = {
+        'year': 365,
+        'quarter': 90,
+        'month': 30,
+        'half_month': 15,
+        'week': 7
+    }
+    for col in ['year', 'quarter', 'month', 'half_month', 'week']:
+        d_length = days[col]
+        mean_res = []
+        skew_res = []
+        kurt_res = []
+        median_res = []
+        variation_res = []
+
+        for i in range(x.shape[0]):
+            if i - d_length < 0:
+                start = 0
+            else:
+                start = i - d_length
+
+            if i == 0:
+                mean_res.append(None)
+                skew_res.append(None)
+                kurt_res.append(None)
+                median_res.append(None)
+                variation_res.append(None)
+            elif i == 1:
+                mean_res.append(x[target_col].iloc[0])
+                skew_res.append(None)
+                kurt_res.append(None)
+                median_res.append(x[target_col].iloc[0])
+                variation_res.append(None)
+            else:
+                ts = x[target_col].iloc[start: i]
+                mean_res.append(ts.mean())
+                skew_res.append(ts.skew())
+                kurt_res.append(ts.kurt())
+                median_res.append(ts.median())
+                variation_res.append(ts.std() / ts.mean())
+
+        x[target_col+'_'+col+'_mean'] = mean_res
+        x[target_col+'_'+col + '_skew'] = skew_res
+        x[target_col+'_'+col + '_kurt'] = kurt_res
+        x[target_col+'_'+col + '_median'] = median_res
+        x[target_col+'_'+col + '_variation'] = variation_res
+
+    to_remove_col_names = list(set(vars_threshold(x) + variation_threshold(x)))
+    to_remove_col_names.append(target_col)
+    if len(to_remove_col_names) > 0:
+        x.drop(columns=to_remove_col_names, inplace=True)
+
+    df = pd.concat((df, x), axis=1)
+
+    return df
 
 
 class TableFeatureGenerator:
@@ -245,6 +335,7 @@ class TableFeatureGenerator:
     def transform(self, X, fillna=False):
         check_is_fitted(self)
         x = X.copy()
+        x = groupby_target_features(x, self.target_col)
         if self.date_col is not None:
             x = date_features(x, self.date_col)
 

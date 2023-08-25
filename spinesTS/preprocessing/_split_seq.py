@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 
 
 def split_series(x_seq, y_seq, window_size: int, pred_steps: int, train_size: Union[None, float] = None,
-                 shuffle: bool=False, skip_steps: int=1):
+                 shuffle: bool = False, skip_steps: int = 1):
     """Returns two-dimensional array cut by the specified window size.
 
     Parameters

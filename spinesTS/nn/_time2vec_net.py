@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from spinesTS.layers import Time2Vec, MoveAvg
-from spinesTS.base import TorchModelMixin
+from spinesTS.base import TorchModelMixin, ForecastingMixin
 
 
 class T2V(nn.Module):
@@ -51,7 +51,7 @@ class T2V(nn.Module):
             return self.linear(x)
 
 
-class Time2VecNet(TorchModelMixin):
+class Time2VecNet(TorchModelMixin, ForecastingMixin):
     def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01,
                  random_seed=42, device=None, ma_window_size=3):
         super(Time2VecNet, self).__init__(random_seed, device=device)

@@ -63,7 +63,7 @@ class Pipeline(ForecastingMixin):
                     ex = self._estimators[t].transform(ex)
                     eval_set = (ex, ey)
 
-        self._fit(x, y, eval_set=eval_set, **kwargs)
+        self._estimator.fit(x, y, eval_set=eval_set, **kwargs)
 
         return self
 

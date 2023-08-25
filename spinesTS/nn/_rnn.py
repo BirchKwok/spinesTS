@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from spinesTS.layers import DifferentialLayer
-from spinesTS.base import TorchModelMixin
+from spinesTS.base import TorchModelMixin, ForecastingMixin
 
 
 class EncoderDecoderBlock(nn.Module):
@@ -27,7 +27,6 @@ class EncoderDecoderBlock(nn.Module):
 
         self.linear = nn.Linear(decoder_input_features, out_features)
         self.selu = nn.SELU()
-        # self.layer_norm = nn.LayerNorm(decoder_input_features)
 
     def forward(self, x, last_output):
         if x.ndim == 2:
@@ -42,8 +41,6 @@ class EncoderDecoderBlock(nn.Module):
         _, (h, c) = self.encoder(last_output)
         output, (h, c) = self.decoder(x, (h, c))
 
-        # output = self.layer_norm(output)
-
         return self.selu(self.linear(output.squeeze()))
 
 
@@ -54,27 +51,26 @@ class Seq2SeqBlock(nn.Module):
 
         self.in_features, self.out_features = in_features, out_features
 
-        self.stack_num = stack_num
-
         if diff_n > 0:
             self.differential_layer = DifferentialLayer(axis=-1, diff_n=diff_n)
         else:
             self.differential_layer = lambda s: s
 
+        blocks_input = in_features - diff_n
         self.blocks = nn.ModuleList(
             [
                 EncoderDecoderBlock(
-                    in_features=in_features - diff_n,
-                    out_features=in_features - diff_n, num_layers=num_layers,
+                    in_features=blocks_input,
+                    out_features=blocks_input, num_layers=num_layers,
                     bias=bias, dropout=dropout, bidirectional=bidirectional
                 ) for i in range(stack_num)
             ]
         )
 
-        self.linear_0 = nn.Linear(in_features - diff_n, 1024)
-        self.linear_1 = nn.Linear(1024, out_features)
-
+        self.linear_0 = nn.Linear(blocks_input, 1024)
         self.selu = nn.SELU()
+
+        self.linear_1 = nn.Linear(1024, out_features)
 
     def forward(self, x):
         x = self.differential_layer(x)
@@ -88,7 +84,7 @@ class Seq2SeqBlock(nn.Module):
         return self.linear_1(output)
 
 
-class StackingRNN(TorchModelMixin):
+class StackingRNN(TorchModelMixin, ForecastingMixin):
     def __init__(self,
                  in_features: int,
                  out_features: int,

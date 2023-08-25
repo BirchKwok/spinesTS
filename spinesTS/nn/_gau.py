@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from spinesTS.layers import GAU
-from spinesTS.base import TorchModelMixin
+from spinesTS.base import TorchModelMixin, ForecastingMixin
 
 
 class SkipConnect(nn.Module):
@@ -64,7 +64,7 @@ class GAUBase(nn.Module):
         return self.linear(x.reshape(-1, x.shape[1] * x.shape[2]))
 
 
-class GAUNet(TorchModelMixin):
+class GAUNet(TorchModelMixin, ForecastingMixin):
     def __init__(self,
                  in_features: Any,
                  out_features: Any,
