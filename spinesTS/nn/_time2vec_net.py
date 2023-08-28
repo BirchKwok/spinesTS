@@ -53,8 +53,8 @@ class T2V(nn.Module):
 
 class Time2VecNet(TorchModelMixin, ForecastingMixin):
     def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01,
-                 random_seed=42, device=None, ma_window_size=3):
-        super(Time2VecNet, self).__init__(random_seed, device=device)
+                 random_seed=42, device=None, ma_window_size=3, loss_fn='mae'):
+        super(Time2VecNet, self).__init__(random_seed, device=device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.flip_features = flip_features
@@ -64,7 +64,7 @@ class Time2VecNet(TorchModelMixin, ForecastingMixin):
     def call(self):
         model = T2V(self.in_features, self.out_features, flip_features=self.flip_features,
                     ma_window_size=self.ma_window_size)
-        loss_fn = nn.HuberLoss()
+        loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer
 

@@ -101,7 +101,7 @@ class TorchModelMixin:
             'train_accuracy': [],
             'test_loss': [],
             'test_accuracy': [],
-            'current_p':[]
+            'current_p': []
         }
 
         seed_everything(seed)

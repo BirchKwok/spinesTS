@@ -7,10 +7,12 @@ from pandas.io.formats import format as fmt
 
 class DataTS(pd.DataFrame):
     """provide common code for spinesTS.data module. """
-    def __init__(self, dataset, index=None, columns=None, dtype=None, name=None):
+    def __init__(self, dataset, index=None, columns=None, dtype=None, name=None, date_column=None, format=None):
         super().__init__(data=dataset, index=index, columns=columns, dtype=dtype)
 
         self.dataset_name = name or 'spinesTS.data.DataTS'
+        if date_column is not None:
+            self[date_column] = pd.to_datetime(self[date_column], format=format)
 
     def __str__(self):
         return f"{self.dataset_name} dataset, shape={self.shape}, head_data=\n{self.head()}"

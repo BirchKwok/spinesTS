@@ -74,9 +74,10 @@ class GAUNet(TorchModelMixin, ForecastingMixin):
                  dropout: float = 0.,
                  learning_rate: float = 0.01,
                  random_seed: int = 42,
-                 device=None
+                 device=None,
+                 loss_fn='mae'
                  ) -> None:
-        super(GAUNet, self).__init__(random_seed, device)
+        super(GAUNet, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.flip_features = flip_features
@@ -87,7 +88,7 @@ class GAUNet(TorchModelMixin, ForecastingMixin):
              **kwargs: Any) -> tuple:
         model = GAUBase(self.in_features, self.out_features,
                         flip_features=self.flip_features, level=level, **kwargs)
-        loss_fn = nn.HuberLoss()
+        loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer
 

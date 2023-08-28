@@ -27,6 +27,7 @@ class EncoderDecoderBlock(nn.Module):
 
         self.linear = nn.Linear(decoder_input_features, out_features)
         self.selu = nn.SELU()
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, last_output):
         if x.ndim == 2:
@@ -74,7 +75,7 @@ class Seq2SeqBlock(nn.Module):
 
     def forward(self, x):
         x = self.differential_layer(x)
-        last_output = x
+        last_output = x.clone()
         for block in self.blocks:
             last_output = block(x, last_output)
 
