@@ -6,14 +6,10 @@ import numpy as np
 
 class DataGenerator:
     """Generate timeseries-like data
-
-    Returns
-    -------
-    None
     """
 
     @staticmethod
-    def trigonometry_ds(size: int = 1000, sin_cos_noise_fact: Iterable[float] = (0.5, 0.3, 0.2),
+    def trigonometry_ds(size: int = 1000, sin_cos_noise_fact: Sized = (0.5, 0.3, 0.2),
                         random_state: Optional[int] = None):
         """Generates a weighted combination sequence of sine and cosine waves
 
@@ -158,12 +154,17 @@ class RandomEventGenerator:
     def _trend(self, sin_cos_noise_fact):
         """Get temporal trends.
 
+        Parameters
+        ----------
+        sin_cos_noise_fact : Tuple of float, the weights of sine, cosine and standard gaussian distributed noise
+
         Returns
         -------
         numpy.ndarray
         """
         np.random.seed(self.random_state)
-        return DataGenerator().trigonometry_ds(size=self.size, random_state=self.random_state, sin_cos_noise_fact=sin_cos_noise_fact)
+        return DataGenerator().trigonometry_ds(size=self.size, random_state=self.random_state,
+                                               sin_cos_noise_fact=sin_cos_noise_fact)
 
     def event(self):
         """Get event data
@@ -180,8 +181,6 @@ class RandomEventGenerator:
             if self.stacking_level > 1:
                 for i in sin_cos_noise_facts[1:]:
                     x += self._trend(i) * 8
-
-
         else:
             x = self._trend(sin_cos_noise_facts[0]) * 8 + self._noise()
 

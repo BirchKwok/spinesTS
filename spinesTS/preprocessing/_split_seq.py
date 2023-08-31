@@ -11,14 +11,14 @@ def split_series(x_seq, y_seq, window_size: int, pred_steps: int, train_size: Un
     """Returns two-dimensional array cut by the specified window size.
 
     Parameters
-    ---------
+    ----------
     x_seq : numpy.ndarray or pandas.Series or list, the series which needed to split
     y_seq : numpy.ndarray or pandas.Series or list, the series which needed to split
     window_size : int, sliding window size
-    skip_steps : int, the number of skipped steps per slide
     pred_steps : int, the number of steps predicted forward by the series
     train_size : float,
     shuffle : bool, whether to shuffle the split results
+    skip_steps : int, the number of skipped steps per slide
 
     Returns
     -------
@@ -68,14 +68,14 @@ def lag_splits(x_seq, window_size, skip_steps=1, pred_steps=1):
     """Returns a two-dimensional array cut by the specified window size.
 
     Parameters
-    ---------
+    ----------
     x_seq : numpy.ndarray or pandas.Series or list, the series which needed to split
     window_size : int, sliding window size
     skip_steps : int, the number of skipped steps per slide
     pred_steps : int, the number of steps predicted forward by the series
 
     Return
-    ------
+    -------
     numpy.ndarray
     """
     assert isinstance(x_seq, (pd.Series, np.ndarray, list))

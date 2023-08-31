@@ -10,35 +10,36 @@ from sklearn.preprocessing import MinMaxScaler
 
 class GaussRankScaler(BaseEstimator, TransformerMixin):
     """Transform features by scaling each feature to a normal distribution.
+
     Parameters
-        ----------
-        epsilon : float, optional, default 1e-4
-            A small amount added to the lower bound or subtracted
-            from the upper bound. This value prevents infinite number
-            from occurring when applying the inverse error function.
-        copy : boolean, optional, default True
-            If False, try to avoid a copy and do inplace scaling instead.
-            This is not guaranteed to always work inplace; e.g. if the data is
-            not a NumPy array, a copy may still be returned.
-        n_jobs : int or None, optional, default None
-            Number of jobs to run in parallel.
-            ``None`` means 1 and ``-1`` means using all processors.
-        interp_kind : str or int, optional, default 'linear'
-           Specifies the kind of interpolation as a string
-            ('linear', 'nearest', 'zero', 'slinear', 'quadratic', 'cubic',
-            'previous', 'next', where 'zero', 'slinear', 'quadratic' and 'cubic'
-            refer to a spline interpolation of zeroth, first, second or third
-            order; 'previous' and 'next' simply return the previous or next value
-            of the point) or as an integer specifying the order of the spline
-            interpolator to use.
-        interp_copy : bool, optional, default False
-            If True, the interpolation function makes internal copies of x and y.
-            If False, references to `x` and `y` are used.
-        Attributes
-        ----------
-        interp_func_ : list
-            The interpolation function for each feature in the training set.
-        """
+    -----------
+    epsilon : float, optional, default 1e-4
+        A small amount added to the lower bound or subtracted
+        from the upper bound. This value prevents infinite number
+        from occurring when applying the inverse error function.
+    copy : boolean, optional, default True
+        If False, try to avoid a copy and do inplace scaling instead.
+        This is not guaranteed to always work inplace; e.g. if the data is
+        not a NumPy array, a copy may still be returned.
+    n_jobs : int or None, optional, default None
+        Number of jobs to run in parallel.
+        ``None`` means 1 and ``-1`` means using all processors.
+    interp_kind : str or int, optional, default 'linear'
+       Specifies the kind of interpolation as a string
+        ('linear', 'nearest', 'zero', 'slinear', 'quadratic', 'cubic',
+        'previous', 'next', where 'zero', 'slinear', 'quadratic' and 'cubic'
+        refer to a spline interpolation of zeroth, first, second or third
+        order; 'previous' and 'next' simply return the previous or next value
+        of the point) or as an integer specifying the order of the spline
+        interpolator to use.
+    interp_copy : bool, optional, default False
+        If True, the interpolation function makes internal copies of x and y.
+        If False, references to `x` and `y` are used.
+
+    Returns
+    -------
+    self, object
+    """
 
     def __init__(self, epsilon=1e-4, copy=True, n_jobs=None, interp_kind='linear', interp_copy=False):
         self.epsilon = epsilon
@@ -50,12 +51,18 @@ class GaussRankScaler(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """Fit interpolation function to link rank with original data for future scaling
+
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
             The data used to fit interpolation function for later scaling along the features axis.
         y
             Ignored
+
+        Returns
+        -------
+        self, object
+
         """
         X = check_array(X, copy=self.copy, estimator=self, dtype=FLOAT_DTYPES, force_all_finite=True)
 
@@ -73,12 +80,17 @@ class GaussRankScaler(BaseEstimator, TransformerMixin):
 
     def transform(self, X, copy=None):
         """Scale the data with the Gauss Rank algorithm
+
         Parameters
         ----------
         X : array-like, shape (n_samples, n_features)
             The data used to scale along the features axis.
         copy : bool, optional (default: None)
             Copy the input X or not.
+
+        Returns
+        -------
+        numpy.ndarray
         """
         check_is_fitted(self, 'interp_func_')
 
@@ -93,12 +105,18 @@ class GaussRankScaler(BaseEstimator, TransformerMixin):
 
     def inverse_transform(self, X, copy=None):
         """Scale back the data to the original representation
+
         Parameters
         ----------
         X : array-like, shape [n_samples, n_features]
             The data used to scale along the features axis.
         copy : bool, optional (default: None)
             Copy the input X or not.
+
+        Returns
+        -------
+        numpy.ndaray
+
         """
         check_is_fitted(self, 'interp_func_')
 

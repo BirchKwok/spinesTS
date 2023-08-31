@@ -20,8 +20,8 @@ class Pipeline(ForecastingMixin):
             X_train, X_test, y_train, y_test =  LoadElectricDataSets().split_ds()
 
             pp = Pipeline([
-            ('sc', 'StandardScaler()),
-            ('tcn', 'TCN1D(30, 30))
+                ('sc', 'StandardScaler()),
+                ('tcn', 'TCN1D(30, 30))
             ])
 
             pp.fit(X_train, y_train)

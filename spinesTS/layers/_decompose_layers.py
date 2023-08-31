@@ -38,6 +38,7 @@ class MoveAvg(nn.Module):
     stride : int, the jump-step-length in calculating the moving average
     padding : str, only support to 'same' and 'valid', valid means not to pad, same means padding with
     the nearest valid value to the null value
+
     Returns
     -------
     torch.Tensor
@@ -77,8 +78,9 @@ class DifferentialLayer(nn.Module):
 
     Parameters
     ----------
-    axis: -1
-    diff_n: 1
+    axis: int, default to -1
+    diff_n: int, default to 1
+
     Returns
     -------
     torch.Tensor

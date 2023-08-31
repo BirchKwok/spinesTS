@@ -3,7 +3,7 @@ import pandas as pd
 import os
 from tabulate import tabulate
 
-from spinesTS.data import DataTS
+from ..frame import DataTS
 
 FILE_PATH = os.path.dirname(__file__)
 

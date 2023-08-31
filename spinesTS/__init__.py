@@ -14,7 +14,7 @@
 # Dev branch marker is: 'X.Y.dev' or 'X.Y.devN' where N is an integer.
 # 'X.Y.dev0' is the canonical version of 'X.Y.dev'
 #
-__version__ = "0.1.1"
+__version__ = "0.1.5"
 
 
 from . import (
@@ -30,3 +30,5 @@ from . import (
     utils,
     metrics
 )
+
+from .frame import DataTS

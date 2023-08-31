@@ -3,10 +3,11 @@ import pandas as pd
 from scipy import stats
 from joblib import Parallel, delayed
 from sklearn.linear_model import LinearRegression
-from spinesUtils.feature_tools import vars_threshold, variation_threshold
+from sklearn.base import TransformerMixin
 
 from spinesTS.utils import check_is_fitted
 from spinesTS.preprocessing import lag_splits
+from spinesTS.base import TableFeatureGenerateMixin
 
 
 class ContinuousFeatureGenerator:
@@ -79,25 +80,18 @@ class ContinuousFeatureGenerator:
         def fit_each_x(_, name='coef'):
             reg = LinearRegression(n_jobs=-1)
             reg.fit(np.reshape(range(len(_)), (-1, 1)), _)
-            if name == 'coef':
-                return list(reg.coef_)
-            else:
-                pred = reg.predict(np.reshape(range(len(_)), (-1, 1)))
-                residual = [np.mean(np.abs(_ - pred), axis=-1)]
-                return residual
+
+            return list(reg.coef_)
 
         _coeff = Parallel(n_jobs=-1)(delayed(fit_each_x)(_) for _ in x)
-        _residual = Parallel(n_jobs=-1)(delayed(fit_each_x)(_, name='residual') for _ in x)
 
-        return np.concatenate((np.array(_coeff), np.array(_residual)), axis=-1), [
-            self.columns_prefix + 'coeff', self.columns_prefix + 'residual'
-        ]
+        return np.array(_coeff), [self.columns_prefix + 'coeff']
 
     def get_entropy(self, x):
         """Get the cross entropy features.
 
         Parameters
-        ----------
+        -----------
         x : array-like
 
         Returns
@@ -116,7 +110,7 @@ class ContinuousFeatureGenerator:
         """Fit the inputting matrix.
 
         Parameters
-        ----------
+        -----------
         x : array-like
 
         Returns
@@ -133,7 +127,7 @@ class ContinuousFeatureGenerator:
         Fit and extract the features of the inputting matrix.
 
         Parameters
-        ----------
+        -----------
         x : array-like
         inplace : Whether to transform x in place or to return a copy.
 
@@ -150,7 +144,7 @@ class ContinuousFeatureGenerator:
         """Extract the features of the inputting matrix.
 
         Parameters
-        ----------
+        -----------
         X : array-like
 
         Returns
@@ -173,134 +167,264 @@ class ContinuousFeatureGenerator:
             return np.concatenate([x, *[i[0] for i in res]], axis=-1)
 
 
-def date_features(df, date_col, drop_date_col=True, format=None):
-    """Date features generation"""
-    assert isinstance(df, pd.DataFrame)
-    x = df[date_col].copy().to_frame()
+class DataExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
+    def __init__(self, date_col, drop_date_col=True, format=None, columns_prefix='timefeatures_'):
+        self.date_col = date_col
+        self.drop_date_col = drop_date_col
+        self.format = format
+        if not isinstance(columns_prefix, str):
+            columns_prefix = 'timefeatures_'
 
-    ds_col = pd.to_datetime(x[date_col], format=format)
-    x['hour'] = ds_col.dt.hour
-    x['minute'] = ds_col.dt.minute
-    x['weekday_1'] = ds_col.dt.weekday
+        self.columns_prefix = columns_prefix
 
-    x['week_1'] = ds_col.dt.week
-    x['month_1'] = ds_col.dt.month
-    x['weekofyear'] = ds_col.dt.weekofyear
-    x['quarter_1'] = ds_col.dt.quarter
-    x['day_of_week'] = ds_col.dt.dayofweek + 1
-    x['day_of_month'] = ds_col.dt.day
+        self.__spinesTS_is_fitted__ = False
 
-    x['day_of_year'] = ds_col.dt.dayofyear
-
-    def dayofquarter(s):
+    @staticmethod
+    def day_of_quarter(s):
         if 1 <= s.month <= 3:
             return s.dayofyear
         elif 4 <= s.month <= 6:
-            return s.dayofyear - (pd.to_datetime(str(s.year) + '-03-31') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
+            return s.dayofyear - (
+                    pd.to_datetime(str(s.year) + '-03-31') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
         elif 7 <= s.month <= 9:
-            return s.dayofyear - (pd.to_datetime(str(s.year) + '-06-30') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
+            return s.dayofyear - (
+                    pd.to_datetime(str(s.year) + '-06-30') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
         else:
-            return s.dayofyear - (pd.to_datetime(str(s.year) + '-9-30') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
+            return s.dayofyear - (
+                    pd.to_datetime(str(s.year) + '-9-30') - pd.to_datetime(str(s.year) + '-01-01')).days - 1
 
-    x['dayofquarter'] = ds_col.apply(lambda s: dayofquarter(s))
+    @staticmethod
+    def day2season(s, season, year_lag=0):
+        if season == 'spring':
+            time_point = pd.to_datetime(str(s.year - year_lag) + '-03-01')
+        elif season == 'summer':
+            time_point = pd.to_datetime(str(s.year - year_lag) + '-06-01')
+        elif season == 'autumn':
+            time_point = pd.to_datetime(str(s.year - year_lag) + '-09-01')
+        else:
+            time_point = pd.to_datetime(str(s.year - year_lag) + '-12-01')
 
-    x['day_to_mid_quarter'] = x['dayofquarter'] - 15
-    x['day_to_start_quarter'] = x['dayofquarter'] - 1
-    x['day_to_end_quarter'] = x['dayofquarter'] - 90
+        return (s - time_point).days
 
-    x['daytomonday'] = abs(ds_col.dt.weekday - 1)  # 仅考虑当周周一
-    x['daytofriday'] = abs(ds_col.dt.weekday - 5)  # 仅考虑当周周五
-    x['daytomiddleweek'] = abs(ds_col.dt.weekday - 3)  # 仅考虑当周周三
+    @staticmethod
+    def season(s):
+        """0: Winter - 1: Spring - 2: Summer - 3: Fall"""
+        if s.month in [12, 1, 2]:
+            return 0
+        elif s.month in [3, 4, 5]:
+            return 1
+        elif s.month in [6, 7, 8]:
+            return 2
+        else:
+            return 3
 
-    x['is_weekend'] = ds_col.dt.weekday // 4
-    x['is_startofwork'] = ds_col.apply(lambda s: 0 if s.weekday() not in [1, 2] else 1)
-    x['is_endofwork'] = ds_col.apply(lambda s: 0 if s.weekday() not in [4, 5] else 1)
-    x['is_startofmonth'] = ds_col.dt.is_month_start.astype(np.int8)
-    x['is_middleofmonth'] = ds_col.apply(lambda s: 0 if s.day not in [14, 15, 16] else 1)
-    x['is_endofmonth'] = ds_col.apply(
-        lambda s: 0 if s.day not in [27, 28, 29, 30, 31] else 1)
+    def fit(self, df):
+        self.__spinesTS_is_fitted__ = True
 
-    x['week_of_month'] = ds_col.apply(lambda d: (d.day - 1) // 7 + 1)
-    x['week_of_year'] = ds_col.dt.weekofyear
-    x['year_diff'] = ds_col.dt.year.max() - ds_col.dt.year
-    x['is_quarter_start'] = ds_col.dt.is_quarter_start.astype(np.int8)
+        return self
 
-    x['is_year_start'] = ds_col.dt.is_year_start.astype(np.int8)
-    x['is_year_end'] = ds_col.dt.is_year_end.astype(np.int8)
-    # 0: Winter - 1: Spring - 2: Summer - 3: Fall
-    x["season"] = np.where(ds_col.dt.month.isin([12, 1, 2]), 0, 1)
-    x["season"] = np.where(ds_col.dt.month.isin([6, 7, 8]), 2, x["season"])
-    x["season"] = pd.Series(np.where(ds_col.dt.month.isin([9, 10, 11]), 3, x["season"])).astype("int8")
+    def transform(self, df):
+        """Date features generation"""
+        check_is_fitted(self)
 
-    to_remove_col_names = list(set(vars_threshold(x) + variation_threshold(x)))
-    to_remove_col_names.append(date_col)
-    if len(to_remove_col_names) > 0:
-        x.drop(columns=to_remove_col_names, inplace=True)
+        assert isinstance(df, pd.DataFrame)
+        x = df[self.date_col].copy().to_frame()
+        ds_col = pd.to_datetime(x[self.date_col], format=self.format)
 
-    df = pd.concat((df, x), axis=1)
-    return df if not drop_date_col else df.drop(columns=date_col)
+        # Basic timestamp features
+        x[self.columns_prefix + 'hour'] = ds_col.dt.hour
+        x[self.columns_prefix + 'minute'] = ds_col.dt.minute
+        x[self.columns_prefix + 'weekday'] = ds_col.dt.weekday
+        x[self.columns_prefix + 'week'] = ds_col.dt.week
+        x[self.columns_prefix + 'month'] = ds_col.dt.month
+        x[self.columns_prefix + 'quarter'] = ds_col.dt.quarter
+        x[self.columns_prefix + 'day_of_month'] = ds_col.dt.day
+        x[self.columns_prefix + 'day_of_year'] = ds_col.dt.dayofyear
+        x[self.columns_prefix + 'day_of_quarter'] = ds_col.apply(lambda s: self.day_of_quarter(s))
+        x[self.columns_prefix + 'week_of_year'] = ds_col.dt.weekofyear
+        x[self.columns_prefix + 'week_of_month'] = ds_col.apply(lambda d: (d.day - 1) // 7 + 1)
+        x[self.columns_prefix + "season"] = ds_col.apply(lambda s: self.season(s))
+
+        # Boolean Flag feature
+        x[self.columns_prefix + 'is_weekend'] = ds_col.apply(lambda s: 0 if s.weekday() in [5, 6] else 1)
+        x[self.columns_prefix + 'is_start_of_week'] = ds_col.apply(lambda s: 0 if s.weekday() != 0 else 1)
+        x[self.columns_prefix + 'is_end_of_week'] = ds_col.apply(lambda s: 0 if s.weekday() != 4 else 1)
+        x[self.columns_prefix + 'is_start_of_month'] = ds_col.dt.is_month_start
+        x[self.columns_prefix + 'is_middle_of_month'] = ds_col.apply(lambda s: 0 if s.day != 15 else 1)
+        x[self.columns_prefix + 'is_end_of_month'] = ds_col.dt.is_month_end
+        x[self.columns_prefix + 'is_quarter_start'] = ds_col.dt.is_quarter_start
+        x[self.columns_prefix + 'is_year_start'] = ds_col.dt.is_year_start
+        x[self.columns_prefix + 'is_year_end'] = ds_col.dt.is_year_end
+
+        # Time difference feature
+        x[self.columns_prefix + 'day_to_mid_quarter'] = x[self.columns_prefix + 'day_of_quarter'] - 15
+        x[self.columns_prefix + 'day_to_start_quarter'] = x[self.columns_prefix + 'day_of_quarter'] - 1
+        x[self.columns_prefix + 'day_to_end_quarter'] = x[self.columns_prefix + 'day_of_quarter'] - 90
+        x[self.columns_prefix + 'day_to_monday'] = abs(ds_col.dt.weekday - 1)  # 仅考虑当周周一
+        x[self.columns_prefix + 'day_to_friday'] = abs(ds_col.dt.weekday - 5)  # 仅考虑当周周五
+        x[self.columns_prefix + 'day_to_middle_week'] = abs(ds_col.dt.weekday - 3)  # 仅考虑当周周三
+        x[self.columns_prefix + 'day_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days
+        x[self.columns_prefix + 'hour_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days * 24
+        x[self.columns_prefix + 'minute_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days * 24 * 60
+        x[self.columns_prefix + 'sec_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days * 24 * 3600
+        x[self.columns_prefix + 'month_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days / 30
+        x[self.columns_prefix + 'week_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days / 7
+        x[self.columns_prefix + 'quarter_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days / 90
+        x[self.columns_prefix + 'year_to_start_timestamp'] = (ds_col - ds_col.min()).dt.days / 365
+
+        # season Time difference feature
+        x[self.columns_prefix + 'day_to_spring'] = ds_col.apply(lambda s: self.day2season(s, 'spring'))
+        x[self.columns_prefix + 'day_to_summer'] = ds_col.apply(lambda s: self.day2season(s, 'summer'))
+        x[self.columns_prefix + 'day_to_autumn'] = ds_col.apply(lambda s: self.day2season(s, 'autumn'))
+        x[self.columns_prefix + 'day_to_winter'] = ds_col.apply(lambda s: self.day2season(s, 'winter'))
+        x[self.columns_prefix + 'week_to_spring'] = ds_col.apply(lambda s: self.day2season(s, 'spring')) / 7
+        x[self.columns_prefix + 'week_to_summer'] = ds_col.apply(lambda s: self.day2season(s, 'summer')) / 7
+        x[self.columns_prefix + 'week_to_autumn'] = ds_col.apply(lambda s: self.day2season(s, 'autumn')) / 7
+        x[self.columns_prefix + 'week_to_winter'] = ds_col.apply(lambda s: self.day2season(s, 'winter')) / 7
+        x[self.columns_prefix + 'month_to_spring'] = ds_col.apply(lambda s: self.day2season(s, 'spring')) / 30
+        x[self.columns_prefix + 'month_to_summer'] = ds_col.apply(lambda s: self.day2season(s, 'summer')) / 30
+        x[self.columns_prefix + 'month_to_autumn'] = ds_col.apply(lambda s: self.day2season(s, 'autumn')) / 30
+        x[self.columns_prefix + 'month_to_winter'] = ds_col.apply(lambda s: self.day2season(s, 'winter')) / 30
+        x[self.columns_prefix + 'quarter_to_spring'] = ds_col.apply(lambda s: self.day2season(s, 'spring')) / 90
+        x[self.columns_prefix + 'quarter_to_summer'] = ds_col.apply(lambda s: self.day2season(s, 'summer')) / 90
+        x[self.columns_prefix + 'quarter_to_autumn'] = ds_col.apply(lambda s: self.day2season(s, 'autumn')) / 90
+        x[self.columns_prefix + 'quarter_to_winter'] = ds_col.apply(lambda s: self.day2season(s, 'winter')) / 90
+
+        x[self.columns_prefix + 'day_to_next_year_spring'] = ds_col.apply(lambda s: self.day2season(s, 'spring', -1))
+        x[self.columns_prefix + 'day_to_next_year_summer'] = ds_col.apply(lambda s: self.day2season(s, 'summer', -1))
+        x[self.columns_prefix + 'day_to_next_year_autumn'] = ds_col.apply(lambda s: self.day2season(s, 'autumn', -1))
+        x[self.columns_prefix + 'day_to_next_year_winter'] = ds_col.apply(lambda s: self.day2season(s, 'winter', -1))
+        x[self.columns_prefix + 'week_to_next_year_spring'] = ds_col.apply(
+            lambda s: self.day2season(s, 'spring', -1)) / 7
+        x[self.columns_prefix + 'week_to_next_year_summer'] = ds_col.apply(
+            lambda s: self.day2season(s, 'summer', -1)) / 7
+        x[self.columns_prefix + 'week_to_next_year_autumn'] = ds_col.apply(
+            lambda s: self.day2season(s, 'autumn', -1)) / 7
+        x[self.columns_prefix + 'week_to_next_year_winter'] = ds_col.apply(
+            lambda s: self.day2season(s, 'winter', -1)) / 7
+        x[self.columns_prefix + 'month_to_next_year_spring'] = ds_col.apply(
+            lambda s: self.day2season(s, 'spring', -1)) / 30
+        x[self.columns_prefix + 'month_to_next_year_summer'] = ds_col.apply(
+            lambda s: self.day2season(s, 'summer', -1)) / 30
+        x[self.columns_prefix + 'month_to_next_year_autumn'] = ds_col.apply(
+            lambda s: self.day2season(s, 'autumn', -1)) / 30
+        x[self.columns_prefix + 'month_to_next_year_winter'] = ds_col.apply(
+            lambda s: self.day2season(s, 'winter', -1)) / 30
+        x[self.columns_prefix + 'quarter_to_next_year_spring'] = ds_col.apply(
+            lambda s: self.day2season(s, 'spring', -1)) / 90
+        x[self.columns_prefix + 'quarter_to_next_year_summer'] = ds_col.apply(
+            lambda s: self.day2season(s, 'summer', -1)) / 90
+        x[self.columns_prefix + 'quarter_to_next_year_autumn'] = ds_col.apply(
+            lambda s: self.day2season(s, 'autumn', -1)) / 90
+        x[self.columns_prefix + 'quarter_to_next_year_winter'] = ds_col.apply(
+            lambda s: self.day2season(s, 'winter', -1)) / 90
+
+        x[self.columns_prefix + 'day_to_last_year_spring'] = ds_col.apply(lambda s: self.day2season(s, 'spring', 1))
+        x[self.columns_prefix + 'day_to_last_year_summer'] = ds_col.apply(lambda s: self.day2season(s, 'summer', 1))
+        x[self.columns_prefix + 'day_to_last_year_autumn'] = ds_col.apply(lambda s: self.day2season(s, 'autumn', 1))
+        x[self.columns_prefix + 'day_to_last_year_winter'] = ds_col.apply(lambda s: self.day2season(s, 'winter', 1))
+        x[self.columns_prefix + 'week_to_last_year_spring'] = ds_col.apply(
+            lambda s: self.day2season(s, 'spring', 1)) / 7
+        x[self.columns_prefix + 'week_to_last_year_summer'] = ds_col.apply(
+            lambda s: self.day2season(s, 'summer', 1)) / 7
+        x[self.columns_prefix + 'week_to_last_year_autumn'] = ds_col.apply(
+            lambda s: self.day2season(s, 'autumn', 1)) / 7
+        x[self.columns_prefix + 'week_to_last_year_winter'] = ds_col.apply(
+            lambda s: self.day2season(s, 'winter', 1)) / 7
+        x[self.columns_prefix + 'month_to_last_year_spring'] = ds_col.apply(
+            lambda s: self.day2season(s, 'spring', 1)) / 30
+        x[self.columns_prefix + 'month_to_last_year_summer'] = ds_col.apply(
+            lambda s: self.day2season(s, 'summer', 1)) / 30
+        x[self.columns_prefix + 'month_to_last_year_autumn'] = ds_col.apply(
+            lambda s: self.day2season(s, 'autumn', 1)) / 30
+        x[self.columns_prefix + 'month_to_last_year_winter'] = ds_col.apply(
+            lambda s: self.day2season(s, 'winter', 1)) / 30
+        x[self.columns_prefix + 'quarter_to_last_year_spring'] = ds_col.apply(
+            lambda s: self.day2season(s, 'spring', 1)) / 90
+        x[self.columns_prefix + 'quarter_to_last_year_summer'] = ds_col.apply(
+            lambda s: self.day2season(s, 'summer', 1)) / 90
+        x[self.columns_prefix + 'quarter_to_last_year_autumn'] = ds_col.apply(
+            lambda s: self.day2season(s, 'autumn', 1)) / 90
+        x[self.columns_prefix + 'quarter_to_last_year_winter'] = ds_col.apply(
+            lambda s: self.day2season(s, 'winter', 1)) / 90
+
+        df = pd.concat((df, self.features_filter(x)), axis=1)
+        return df if not self.drop_date_col else df.drop(columns=self.date_col)
 
 
-def groupby_target_features(df, target_col):
-    """target features"""
-    assert isinstance(df, pd.DataFrame)
-    x = df[target_col].copy().to_frame()
+class DailyTargetExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
+    def __init__(self, target_col, date_col, columns_prefix='targetfeatures_', freq='q'):
+        self.target_col = target_col
+        self.date_col = date_col
 
-    days = {
-        'year': 365,
-        'quarter': 90,
-        'month': 30,
-        'half_month': 15,
-        'week': 7
-    }
-    for col in ['year', 'quarter', 'month', 'half_month', 'week']:
-        d_length = days[col]
-        mean_res = []
-        skew_res = []
-        kurt_res = []
-        median_res = []
-        variation_res = []
+        if not isinstance(columns_prefix, str):
+            columns_prefix = 'targetfeatures_'
 
-        for i in range(x.shape[0]):
-            if i - d_length < 0:
-                start = 0
-            else:
-                start = i - d_length
+        self.columns_prefix = columns_prefix
+        self.__spinesTS_is_fitted__ = False
 
-            if i == 0:
-                mean_res.append(None)
-                skew_res.append(None)
-                kurt_res.append(None)
-                median_res.append(None)
-                variation_res.append(None)
-            elif i == 1:
-                mean_res.append(x[target_col].iloc[0])
-                skew_res.append(None)
-                kurt_res.append(None)
-                median_res.append(x[target_col].iloc[0])
-                variation_res.append(None)
-            else:
-                ts = x[target_col].iloc[start: i]
-                mean_res.append(ts.mean())
-                skew_res.append(ts.skew())
-                kurt_res.append(ts.kurt())
-                median_res.append(ts.median())
-                variation_res.append(ts.std() / ts.mean())
+    def fit(self, df):
+        self.__spinesTS_is_fitted__ = True
 
-        x[target_col+'_'+col+'_mean'] = mean_res
-        x[target_col+'_'+col + '_skew'] = skew_res
-        x[target_col+'_'+col + '_kurt'] = kurt_res
-        x[target_col+'_'+col + '_median'] = median_res
-        x[target_col+'_'+col + '_variation'] = variation_res
+        return self
 
-    to_remove_col_names = list(set(vars_threshold(x) + variation_threshold(x)))
-    to_remove_col_names.append(target_col)
-    if len(to_remove_col_names) > 0:
-        x.drop(columns=to_remove_col_names, inplace=True)
+    def weekday_groupby(self, df):
+        x = df[[self.date_col, self.target_col]].copy()
 
-    df = pd.concat((df, x), axis=1)
+        x['weekday'] = x[self.date_col].dt.weekday
 
-    return df
+        days = {
+            'quarter': 90,
+            'month': 30,
+            'double_week': 14,
+        }
+
+        for col in days:
+            d_length = days[col]
+            mean_res = []
+            median_res = []
+            p25 = []
+            p75 = []
+
+            for i in range(x.shape[0]):
+                if i - d_length <= 0:
+                    start = 0
+                else:
+                    start = i - d_length
+
+                if i <= 7:
+                    mean_res.append(0)
+                    median_res.append(0)
+                    p25.append(0)
+                    p75.append(0)
+                else:
+                    weekday = x['weekday'].iloc[i]
+                    ts = x.iloc[start: i].query(f"weekday == {weekday}")[self.target_col]
+                    mean_res.append(ts.mean())
+                    median_res.append(ts.median())
+                    p25.append(ts.quantile(q=0.25))
+                    p75.append(ts.quantile(q=0.75))
+
+            x[self.columns_prefix + self.target_col + '_' + col + '_mean'] = mean_res
+            x[self.columns_prefix + self.target_col + '_' + col + '_median'] = median_res
+            x[self.columns_prefix + self.target_col + '_' + col + '_p25'] = p25
+            x[self.columns_prefix + self.target_col + '_' + col + '_p75'] = p75
+
+        x.drop(columns=['weekday', self.date_col, self.target_col], inplace=True)
+
+        return x
+
+    def transform(self, df):
+        """target features"""
+        check_is_fitted(self)
+
+        assert isinstance(df, pd.DataFrame)
+        assert isinstance(df, pd.DataFrame)
+
+        x = self.weekday_groupby(df)
+        df = pd.concat((df, self.features_filter(x)), axis=1)
+
+        return df
 
 
 class TableFeatureGenerator:
@@ -310,16 +434,22 @@ class TableFeatureGenerator:
                  target_col,
                  window_size,
                  drop_init_features=False,
-                 date_col=None
+                 date_col=None,
+                 format=None,
+                 tf_columns_prefix='timefeatures_',
+                 te_columns_prefix='targetfeatures_'
                  ):
         self.target_col = target_col
         self.date_col = date_col
         self._window_size = window_size
-
-        self.__spinesTS_is_fitted__ = False
+        self.format = format
+        self.tf_columns_prefix = tf_columns_prefix
+        self.te_columns_prefix = te_columns_prefix
         self.continuous_fe = ContinuousFeatureGenerator(
             drop_init_features=drop_init_features,
         ).fit(np.ones((1, 1)))
+
+        self.__spinesTS_is_fitted__ = False
 
     @staticmethod
     def _split_target(x, window_size, skip_steps=1):
@@ -335,16 +465,19 @@ class TableFeatureGenerator:
     def transform(self, X, fillna=False):
         check_is_fitted(self)
         x = X.copy()
-        x = groupby_target_features(x, self.target_col)
+        x = DailyTargetExtendFeatures(self.target_col, date_col=self.date_col,
+                                      columns_prefix=self.te_columns_prefix
+                                      ).fit_transform(x)
         if self.date_col is not None:
-            x = date_features(x, self.date_col)
+            x = DataExtendFeatures(date_col=self.date_col, drop_date_col=False, format=self.format,
+                                   columns_prefix=self.tf_columns_prefix).fit_transform(x)
 
         lag_features = self._split_target(x[self.target_col], window_size=self._window_size, skip_steps=1)
 
         _ = self.continuous_fe.transform(lag_features)
         lag_features = pd.DataFrame(
             _, columns=[f'{self.target_col}_{i}' for i in range(self._window_size)] +
-            self.continuous_fe.columns
+                       self.continuous_fe.columns
         )
 
         # fill the first rows

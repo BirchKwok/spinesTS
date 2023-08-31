@@ -9,7 +9,6 @@ class DummyModel(ForecastingMixin):
     Naive forecasting, which uses the last value of the time series to make a naive prediction
 
     """
-
     def __init__(self):
         self.in_features = None
         self.out_features = None

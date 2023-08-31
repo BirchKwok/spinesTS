@@ -16,7 +16,8 @@ def set_device(device=None):
     
     Parameters
     ----------
-    device : None or str, default to cuda(if torch.cuda.is_available() is True and only one gpu on the machine), 
+    device : None or str, default to cuda(if torch.cuda.is_available() is True
+        and only one gpu on the machine),
         if multi gpu on the machine, default to cuda:0, else, default to cpu
     
     Returns
@@ -37,12 +38,24 @@ def set_device(device=None):
     return device
 
 
-def get_loss_func(name):
-    assert isinstance(name, str)
-    name = name.lower()
+def get_loss_func(name=None):
+    """get loss function
+
+    Parameters
+    ----------
+    name: str, name of loss function, default None
+
+    Returns
+    -------
+    object, loss function.
+    """
     names = {'huber': nn.HuberLoss(), 'mse': nn.MSELoss(), 'mae': nn.L1Loss(),
              'wmape': WMAPELoss(), 'rmse': RMSELoss()}
-    return names[name]
+    if isinstance(name, str):
+        name = name.lower()
+        return names[name]
+    else:
+        return names['mae']
 
 
 class TorchModelMixin:
@@ -83,7 +96,8 @@ class TorchModelMixin:
     Parameters
     ----------
     seed : int or None, random seed
-    device : str or None, device name 
+    device : str or None, device name
+    loss_fn: str or None, loss function
 
     Returns
     -------
@@ -211,6 +225,7 @@ class TorchModelMixin:
         return obj
 
     def metric(self, y_true, y_pred):
+        """model metric"""
         return mae(y_true, y_pred)
 
     def _get_batch_size(self, x, batch_size='auto'):

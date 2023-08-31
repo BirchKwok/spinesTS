@@ -10,6 +10,7 @@ def check_is_fitted(estimator, attributes=None, *, msg=None, all_or_any=all):
     If an estimator does not set any attributes with a trailing underscore, it
     can define a ``__sklearn_is_fitted__`` method returning a boolean to specify if the
     estimator is fitted or not.
+
     Parameters
     ----------
     estimator : estimator instance
@@ -29,6 +30,7 @@ def check_is_fitted(estimator, attributes=None, *, msg=None, all_or_any=all):
         Eg. : "Estimator, %(name)s, must be fitted before sparsifying".
     all_or_any : callable, {all, any}, default=all
         Specify whether all or any of the given attributes must exist.
+
     Returns
     -------
     None

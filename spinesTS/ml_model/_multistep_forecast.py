@@ -99,6 +99,7 @@ class MultiOutputRegressor(ForecastingMixin, _MultiOutputEstimator):
 
     def fit(self, X, y, eval_set=None, **fit_params):
         """Fit the model to data, separately for each output variable.
+
         Parameters
         ----------
         X : {array-like, sparse matrix} of shape (n_samples, n_features)
@@ -110,6 +111,7 @@ class MultiOutputRegressor(ForecastingMixin, _MultiOutputEstimator):
             passed to the ``estimator.fit`` method of each step
         **fit_params : dict of string -> object
             Parameters passed to the ``estimator.fit`` method of each step.
+
         Returns
         -------
         self : object

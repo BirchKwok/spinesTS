@@ -9,7 +9,6 @@ class GaussianNoise1d(nn.Module):
     Parameters
     ----------
     level: float, the scaling multiple of gaussian noise
-    device: str or None, device name
 
     Returns
     -------

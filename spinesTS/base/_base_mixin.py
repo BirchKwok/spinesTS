@@ -1,4 +1,5 @@
 import numpy as np
+from spinesUtils.feature_tools import vars_threshold, variation_threshold
 
 from spinesTS.metrics import r2_score
 
@@ -8,13 +9,13 @@ class ForecastingMixin:
         """Extrapolation prediction.
 
         Parameters
-        ============
+        ----------
         x: to_predict data, must be 2 dims data
         n: predict steps, must be int
 
         Returns
-        =======
-        2 dims np.ndarray
+        -------
+        np.ndarray, which has 2 dims
 
         """
         assert isinstance(n, int)
@@ -42,3 +43,13 @@ class ForecastingMixin:
             return r2_score(y.T, self.predict(x).T)
         else:
             return r2_score(y, self.predict(x))
+
+
+class TableFeatureGenerateMixin:
+    """Table Feature Generate Mixin class"""
+    def features_filter(self, x):
+        to_remove_col_names = list(set(vars_threshold(x) + variation_threshold(x)))
+        if len(to_remove_col_names) > 0:
+            x.drop(columns=to_remove_col_names, inplace=True)
+
+        return x

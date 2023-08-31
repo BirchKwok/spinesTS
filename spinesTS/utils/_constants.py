@@ -5,12 +5,23 @@ import warnings
 import numpy as np
 import torch
 
+from ..frame import DataTS
+
+
 max_seed_value = np.iinfo(np.uint32).max
 min_seed_value = np.iinfo(np.uint32).min
 
 
 def seed_everything(seed: Optional[int] = None) -> int:
-    """
+    """set random seed for everything.
+
+    Parameters
+    ----------
+    seed: int, random seed, default None
+
+    Returns
+    -------
+    int, random seed after setting.
     """
     if seed is None:
         seed = np.random.randint(min_seed_value, max_seed_value)
@@ -30,6 +41,9 @@ def seed_everything(seed: Optional[int] = None) -> int:
     return seed
 
 
-class FrozenDict(dict):
-    def __setitem__(self, key, value):
-        raise AttributeError("FrozenDict can not be modified.")
+def check_if_datats(x):
+    """check input frame type"""
+    if not isinstance(x, DataTS):
+        raise TypeError("Only accept dataframe input of type spinesTS.frame.DataTS, "
+                        "maybe you can try spinesTS.DataTS(your_pd_frame) to fix that")
+    return

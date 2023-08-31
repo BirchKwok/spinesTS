@@ -6,14 +6,14 @@ from spinesTS.ml_model import MultiOutputRegressor
 from spinesTS.utils import check_is_fitted
 from spinesTS.pipeline import Pipeline
 from spinesTS.preprocessing import split_series, lag_splits, moving_average
-from spinesTS.features_generator import date_features, groupby_target_features
+from spinesTS.features_generator import DataExtendFeatures, DailyTargetExtendFeatures
 
 
 class GBRTPreprocessing:
     """WideGBRT features engineering class"""
     def __init__(self, in_features, out_features, target_col,
                  train_size=0.8, date_col=None, differential_n=0, moving_avg_n=0,
-                 extend_target_features=True
+                 extend_daily_target_features=True
                  ):
         self.cf = None
         self.input_features = in_features
@@ -21,7 +21,7 @@ class GBRTPreprocessing:
         self.target_col = target_col
         self.train_size = train_size
         self.date_col = date_col
-        self.extend_target_features = extend_target_features
+        self.extend_daily_target_features = extend_daily_target_features
         assert isinstance(differential_n, int) and differential_n >= 0
         self.differential_n = differential_n
         assert isinstance(moving_avg_n, int) and moving_avg_n >= 0
@@ -32,10 +32,10 @@ class GBRTPreprocessing:
 
     def process_date_col(self, x):
         """Processing date column"""
-        return date_features(x, date_col=self.date_col, drop_date_col=True)
+        return DataExtendFeatures(date_col=self.date_col, drop_date_col=True).fit_transform(x)
 
     def process_target_col(self, x):
-        return groupby_target_features(x, target_col=self.target_col)
+        return DailyTargetExtendFeatures(target_col=self.target_col, date_col=self.date_col).fit_transform(x)
 
     def check_x_types(self, x):
         assert isinstance(x, (pd.DataFrame, np.ndarray))
@@ -59,13 +59,14 @@ class GBRTPreprocessing:
 
         result's columns sequence:
         lag_1, lag_2, lag_3, ..., lag_n, x_col_1, x_col_2, ..., x_col_n, date_fea_1, date_fea_2, ..., date_fea_n
+
         Parameters
-        ---------
+        ----------
         x: spines.data.DataTS or pandas.core.DataFrame or numpy.ndarray, the data that needs to be transformed
         mode: ('train', 'predict'), the way to transform data, default: 'train'
 
-        Return
-        ------
+        Returns
+        -------
         numpy.ndarray, x_train, x_test, y_train, y_test, when mode = 'train', else, x, y
 
         """
@@ -77,7 +78,7 @@ class GBRTPreprocessing:
         if x.shape != self.x_shape:
             raise ValueError("data shape does not match the shape of the data at the time of fitting.")
 
-        if self.extend_target_features:
+        if self.extend_daily_target_features:
             x = self.process_target_col(x)
 
         _tar = x[self.target_col].values if isinstance(x, pd.DataFrame) else x[:, self.target_col]
@@ -153,25 +154,64 @@ class GBRTPreprocessing:
 
 
 class WideGBRT(ForecastingMixin):
-    def __init__(self, model, scaler=None):
-        if scaler:
-            multi_reg = Pipeline([
-                ('sc', scaler),
-                ('multi_reg', MultiOutputRegressor(model))
-            ])
+    def __init__(self, model, scaler=None, is_pipeline=False, clip=False, clip_rate=0.2):
+        """
+        
+        Parameters
+        -----------
+        model: estimator, note that estimator should implement the fit and predict method.
+        scaler: Numerical scale normalizer, note that scaler should implement the fit and predict method.
+            Default to None.
+        is_pipeline: whether model is a sklearn-type pipeline,
+            if not, class WideGBRT will automatically assemble a pipeline to predict multiple target values.
+            Default to False.
+        clip: whether to clip the predict result
+        clip_rate: float, 0 <= clip_rate, a trimmed range of values
 
-            self.model = multi_reg
+        Returns
+        -------
+        None
+
+        """
+        if not is_pipeline:
+            if scaler:
+                multi_reg = Pipeline([
+                    ('sc', scaler),
+                    ('multi_reg', MultiOutputRegressor(model))
+                ])
+    
+                self.model = multi_reg
+            else:
+                self.model = MultiOutputRegressor(model)
         else:
-            self.model = MultiOutputRegressor(model)
+            self.model = model
+
+        assert isinstance(clip, bool)
+
+        self.clip = clip
+        if not isinstance(clip_rate, float) and clip_rate < 0:
+            self.clip_rate = 0
+        else:
+            self.clip_rate = clip_rate
+
+        self.data_min = None
+        self.data_max = None
 
         self.__spinesTS_is_fitted__ = False
 
     def fit(self, X, y, **model_fit_kwargs):
         self.model.fit(X, y, **model_fit_kwargs)
+        if self.clip:
+            self.data_min = y[-3: -1].flatten().min() * (1 - self.clip_rate)
+            self.data_max = y[-3: -1].flatten().max() * (1 + self.clip_rate)
 
         self.__spinesTS_is_fitted__ = True
         return self
 
     def predict(self, X, **model_predict_kwargs):
         check_is_fitted(self)
-        return self.model.predict(X, **model_predict_kwargs)
+        res = self.model.predict(X, **model_predict_kwargs)
+        if self.clip:
+            res = np.where(res < self.data_min, self.data_min, res)
+            res = np.where(res < self.data_max, self.data_max, res)
+        return res

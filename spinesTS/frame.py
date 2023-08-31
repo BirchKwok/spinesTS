@@ -6,11 +6,14 @@ from pandas.io.formats import format as fmt
 
 
 class DataTS(pd.DataFrame):
-    """provide common code for spinesTS.data module. """
-    def __init__(self, dataset, index=None, columns=None, dtype=None, name=None, date_column=None, format=None):
-        super().__init__(data=dataset, index=index, columns=columns, dtype=dtype)
+    """Convert a pandas dataframe to a time series dataframe.
 
-        self.dataset_name = name or 'spinesTS.data.DataTS'
+    """
+    def __init__(self, dataset, name=None, date_column=None, format=None):
+        super().__init__(data=dataset)
+        self.date_column = date_column
+        self.format = format
+        self.dataset_name = name or 'spinesTS.DataTS'
         if date_column is not None:
             self[date_column] = pd.to_datetime(self[date_column], format=format)
 
@@ -65,4 +68,3 @@ class DataTS(pd.DataFrame):
             return prefix + fmt.DataFrameRenderer(formatter).to_html(notebook=True) + postfix
         else:
             return None
-

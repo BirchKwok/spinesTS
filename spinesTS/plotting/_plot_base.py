@@ -124,10 +124,11 @@ def plot2d(*S: Sequence, x: Optional[Sequence] = None,
     rows = num if num < 5 else (num // subplots_shape[-1] + 1 if num % subplots_shape[-1] > 0
                                 else num // subplots_shape[-1])
 
-    for j in range(len(_to_plot_array)):
+    for j in range(len(_to_plot_array)):  # figures
         for i in range(1, num + 1):
             ax = plt.subplot(rows, cols, i)
-            ax.set_title(title)
+            if title is not None:
+                ax.set_title(title+f' {i-1}')
 
             if labels is None:
                 label = f'label_' + str(j + 1)
