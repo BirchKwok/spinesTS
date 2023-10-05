@@ -6,7 +6,7 @@ from spinesTS.ml_model import MultiOutputRegressor
 from spinesTS.utils import check_is_fitted
 from spinesTS.pipeline import Pipeline
 from spinesTS.preprocessing import split_series, lag_splits, moving_average
-from spinesTS.features_generator import DataExtendFeatures, DailyTargetExtendFeatures
+from spinesTS.features_generator import DataExtendFeatures
 
 
 class GBRTPreprocessing:
@@ -34,8 +34,19 @@ class GBRTPreprocessing:
         """Processing date column"""
         return DataExtendFeatures(date_col=self.date_col, drop_date_col=True).fit_transform(x)
 
-    def process_target_col(self, x):
-        return DailyTargetExtendFeatures(target_col=self.target_col, date_col=self.date_col).fit_transform(x)
+    @staticmethod
+    def process_target_col(x):
+        assert x.ndim == 2
+
+        mean_res = x.mean(axis=1).reshape((-1, 1))
+        median_res = np.percentile(x, q=50, axis=1).reshape((-1, 1))
+        min_res = x.min(axis=1).reshape((-1, 1))
+        max_res = x.max(axis=1).reshape((-1, 1))
+        p25 = np.percentile(x, q=25, axis=1).reshape((-1, 1))
+        p75 = np.percentile(x, q=75, axis=1).reshape((-1, 1))
+        std = np.std(x, axis=1).reshape((-1, 1))
+
+        return np.concatenate((mean_res, median_res, max_res, min_res, p25, p75, std), axis=1)
 
     def check_x_types(self, x):
         assert isinstance(x, (pd.DataFrame, np.ndarray))
@@ -78,9 +89,6 @@ class GBRTPreprocessing:
         if x.shape != self.x_shape:
             raise ValueError("data shape does not match the shape of the data at the time of fitting.")
 
-        if self.extend_daily_target_features:
-            x = self.process_target_col(x)
-
         _tar = x[self.target_col].values if isinstance(x, pd.DataFrame) else x[:, self.target_col]
 
         if isinstance(x, pd.DataFrame):
@@ -98,6 +106,9 @@ class GBRTPreprocessing:
             if self.train_size is None:
                 x, y = split_series(_tar, _tar, self.input_features, self.output_features, train_size=self.train_size)
 
+                if self.extend_daily_target_features:
+                    tar_fea_x = self.process_target_col(x)
+
                 if self.moving_avg_n > 0:
                     x = moving_average(x, window_size=self.moving_avg_n)
 
@@ -107,12 +118,20 @@ class GBRTPreprocessing:
                 x_non_lag, _ = split_series(_non_lag_fea, _tar, self.input_features,
                                             self.output_features, train_size=self.train_size)
                 if x_non_lag.shape[1] > 0:
+                    if self.extend_daily_target_features:
+                        return np.concatenate((x, tar_fea_x, x_non_lag[:, -1, :].squeeze()), axis=1), y
                     return np.concatenate((x, x_non_lag[:, -1, :].squeeze()), axis=1), y
                 else:
+                    if self.extend_daily_target_features:
+                        return np.concatenate((x, tar_fea_x), axis=1), y
                     return x, y
             else:
                 x_train, x_test, y_train, y_test = split_series(_tar, _tar, self.input_features,
                                                                 self.output_features, train_size=self.train_size)
+
+                if self.extend_daily_target_features:
+                    tar_fea_x_train = self.process_target_col(x_train)
+                    tar_fea_x_test = self.process_target_col(x_test)
 
                 if self.moving_avg_n > 0:
                     x_train = moving_average(x_train, window_size=self.moving_avg_n)
@@ -128,14 +147,23 @@ class GBRTPreprocessing:
                 # lag_1, lag_2, lag_3, ..., lag_n, x_col_1, x_col_2, ..., x_col_n,
                 # date_fea_1, date_fea_2, ..., date_fea_n
                 if x_non_lag_train.shape[1] > 0 and x_non_lag_test.shape[1] > 0:
+                    if self.extend_daily_target_features:
+                        return np.concatenate((x_train, tar_fea_x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
+                            np.concatenate((x_test, tar_fea_x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
                     return np.concatenate((x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
                         np.concatenate((x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
                 else:
+                    if self.extend_daily_target_features:
+                        np.concatenate((x_train, tar_fea_x_train), axis=1), \
+                            np.concatenate((x_test, tar_fea_x_test), axis=1), y_train, y_test
                     return x_train, x_test, y_train, y_test
         else:
             split_tar = lag_splits(
                 _tar, window_size=self.input_features, skip_steps=1, pred_steps=1
             )[:-self.output_features]
+
+            if self.extend_daily_target_features:
+                tar_fea_x = self.process_target_col(split_tar)
 
             if self.moving_avg_n > 0:
                 split_tar = moving_average(split_tar, window_size=self.moving_avg_n)
@@ -148,13 +176,17 @@ class GBRTPreprocessing:
             )[:-self.output_features]
 
             if split_non_lag_fea.shape[1] > 0:
+                if self.extend_daily_target_features:
+                    return np.concatenate((split_tar, tar_fea_x, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
                 return np.concatenate((split_tar, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
             else:
+                if self.extend_daily_target_features:
+                    return np.concatenate((split_tar, tar_fea_x), axis=1)
                 return split_tar
 
 
 class WideGBRT(ForecastingMixin):
-    def __init__(self, model, scaler=None, is_pipeline=False, clip=False, clip_rate=0.2):
+    def __init__(self, model, scaler=None, is_pipeline=False):
         """
         
         Parameters
@@ -165,8 +197,6 @@ class WideGBRT(ForecastingMixin):
         is_pipeline: whether model is a sklearn-type pipeline,
             if not, class WideGBRT will automatically assemble a pipeline to predict multiple target values.
             Default to False.
-        clip: whether to clip the predict result
-        clip_rate: float, 0 <= clip_rate, a trimmed range of values
 
         Returns
         -------
@@ -186,32 +216,14 @@ class WideGBRT(ForecastingMixin):
         else:
             self.model = model
 
-        assert isinstance(clip, bool)
-
-        self.clip = clip
-        if not isinstance(clip_rate, float) and clip_rate < 0:
-            self.clip_rate = 0
-        else:
-            self.clip_rate = clip_rate
-
-        self.data_min = None
-        self.data_max = None
-
         self.__spinesTS_is_fitted__ = False
 
     def fit(self, X, y, **model_fit_kwargs):
         self.model.fit(X, y, **model_fit_kwargs)
-        if self.clip:
-            self.data_min = y[-3: -1].flatten().min() * (1 - self.clip_rate)
-            self.data_max = y[-3: -1].flatten().max() * (1 + self.clip_rate)
 
         self.__spinesTS_is_fitted__ = True
         return self
 
     def predict(self, X, **model_predict_kwargs):
         check_is_fitted(self)
-        res = self.model.predict(X, **model_predict_kwargs)
-        if self.clip:
-            res = np.where(res < self.data_min, self.data_min, res)
-            res = np.where(res < self.data_max, self.data_max, res)
-        return res
+        return self.model.predict(X, **model_predict_kwargs)

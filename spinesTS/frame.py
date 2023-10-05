@@ -9,13 +9,19 @@ class DataTS(pd.DataFrame):
     """Convert a pandas dataframe to a time series dataframe.
 
     """
-    def __init__(self, dataset, name=None, date_column=None, format=None):
+    def __init__(self, dataset, name=None, date_column=None, format=None, unit=None):
         super().__init__(data=dataset)
         self.date_column = date_column
         self.format = format
         self.dataset_name = name or 'spinesTS.DataTS'
         if date_column is not None:
-            self[date_column] = pd.to_datetime(self[date_column], format=format)
+            self[date_column] = pd.to_datetime(self[date_column], format=format, unit=unit)
+
+        self.convert2datetime()
+
+    def convert2datetime(self):
+        # 将传入的pandas dataframe转换为以时间为索引的dataframe
+        self.set_index(self.date_column, inplace=True, drop=True)
 
     def __str__(self):
         return f"{self.dataset_name} dataset, shape={self.shape}, head_data=\n{self.head()}"
@@ -24,8 +30,7 @@ class DataTS(pd.DataFrame):
         return self.__str__()
 
     def _repr_html_(self) -> str | None:
-        """
-        Return a html representation for a particular DataFrame.
+        """Return a html representation for a particular DataFrame.
 
         Mainly for IPython notebook.
         """

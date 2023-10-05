@@ -235,13 +235,12 @@ class DataExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
         x[self.columns_prefix + 'hour'] = ds_col.dt.hour
         x[self.columns_prefix + 'minute'] = ds_col.dt.minute
         x[self.columns_prefix + 'weekday'] = ds_col.dt.weekday
-        x[self.columns_prefix + 'week'] = ds_col.dt.week
+        x[self.columns_prefix + 'week'] = ds_col.apply(lambda s: s.week)
         x[self.columns_prefix + 'month'] = ds_col.dt.month
         x[self.columns_prefix + 'quarter'] = ds_col.dt.quarter
         x[self.columns_prefix + 'day_of_month'] = ds_col.dt.day
         x[self.columns_prefix + 'day_of_year'] = ds_col.dt.dayofyear
         x[self.columns_prefix + 'day_of_quarter'] = ds_col.apply(lambda s: self.day_of_quarter(s))
-        x[self.columns_prefix + 'week_of_year'] = ds_col.dt.weekofyear
         x[self.columns_prefix + 'week_of_month'] = ds_col.apply(lambda d: (d.day - 1) // 7 + 1)
         x[self.columns_prefix + "season"] = ds_col.apply(lambda s: self.season(s))
 
@@ -353,9 +352,10 @@ class DataExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
 
 
 class DailyTargetExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
-    def __init__(self, target_col, date_col, columns_prefix='targetfeatures_', freq='q'):
+    def __init__(self, target_col, date_col, lag, columns_prefix='targetfeatures_'):
         self.target_col = target_col
         self.date_col = date_col
+        self.lag = lag
 
         if not isinstance(columns_prefix, str):
             columns_prefix = 'targetfeatures_'
@@ -425,70 +425,3 @@ class DailyTargetExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
         df = pd.concat((df, self.features_filter(x)), axis=1)
 
         return df
-
-
-class TableFeatureGenerator:
-    """Table features """
-
-    def __init__(self,
-                 target_col,
-                 window_size,
-                 drop_init_features=False,
-                 date_col=None,
-                 format=None,
-                 tf_columns_prefix='timefeatures_',
-                 te_columns_prefix='targetfeatures_'
-                 ):
-        self.target_col = target_col
-        self.date_col = date_col
-        self._window_size = window_size
-        self.format = format
-        self.tf_columns_prefix = tf_columns_prefix
-        self.te_columns_prefix = te_columns_prefix
-        self.continuous_fe = ContinuousFeatureGenerator(
-            drop_init_features=drop_init_features,
-        ).fit(np.ones((1, 1)))
-
-        self.__spinesTS_is_fitted__ = False
-
-    @staticmethod
-    def _split_target(x, window_size, skip_steps=1):
-        return lag_splits(x, window_size=window_size, skip_steps=skip_steps, pred_steps=1)
-
-    def fit(self, X):
-        assert isinstance(X, pd.DataFrame), \
-            "parameter `X` only accept the pandas DataFrame-type data. "
-
-        self.__spinesTS_is_fitted__ = True
-        return self
-
-    def transform(self, X, fillna=False):
-        check_is_fitted(self)
-        x = X.copy()
-        x = DailyTargetExtendFeatures(self.target_col, date_col=self.date_col,
-                                      columns_prefix=self.te_columns_prefix
-                                      ).fit_transform(x)
-        if self.date_col is not None:
-            x = DataExtendFeatures(date_col=self.date_col, drop_date_col=False, format=self.format,
-                                   columns_prefix=self.tf_columns_prefix).fit_transform(x)
-
-        lag_features = self._split_target(x[self.target_col], window_size=self._window_size, skip_steps=1)
-
-        _ = self.continuous_fe.transform(lag_features)
-        lag_features = pd.DataFrame(
-            _, columns=[f'{self.target_col}_{i}' for i in range(self._window_size)] +
-                       self.continuous_fe.columns
-        )
-
-        # fill the first rows
-        fillna = fillna if fillna is not False else np.nan
-        _ = pd.DataFrame([[fillna for i in range(lag_features.shape[1])] for j in range(self._window_size)],
-                         columns=lag_features.columns)
-
-        lag_features = pd.concat((_, lag_features), ignore_index=True, axis=0)
-
-        return pd.concat((x, lag_features.iloc[:-1, :]), axis=1)
-
-    def fit_transform(self, X, fillna=False):
-        self.fit(X)
-        return self.transform(X, fillna=fillna)
