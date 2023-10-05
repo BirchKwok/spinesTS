@@ -17,7 +17,7 @@ class DataTS(pd.DataFrame):
         if date_column is not None:
             self[date_column] = pd.to_datetime(self[date_column], format=format, unit=unit)
 
-        self.convert2datetime()
+            self.convert2datetime()
 
     def convert2datetime(self):
         # 将传入的pandas dataframe转换为以时间为索引的dataframe

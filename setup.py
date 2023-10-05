@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='spinesTS',
-    version="0.2.0",
+    version="0.2.1",
     description='spinesTS, a powerful timeseries toolsets.',
     keywords='machine learning',
     packages=find_packages(),
