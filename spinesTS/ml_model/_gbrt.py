@@ -61,7 +61,7 @@ class GBRTPreprocessing:
 
     def fit(self, x):
         self.check_x_types(x)
-        self.x_shape = x.shape
+        self.x_shape = x.shape[1]
         self.__spinesTS_is_fitted__ = True
         return self
 
@@ -86,7 +86,7 @@ class GBRTPreprocessing:
 
         self.check_x_types(x)
 
-        if x.shape != self.x_shape:
+        if x.shape[1] != self.x_shape:
             raise ValueError("data shape does not match the shape of the data at the time of fitting.")
 
         _tar = x[self.target_col].values if isinstance(x, pd.DataFrame) else x[:, self.target_col]
