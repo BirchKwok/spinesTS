@@ -347,7 +347,7 @@ class DataExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
         x[self.columns_prefix + 'quarter_to_last_year_winter'] = ds_col.apply(
             lambda s: self.day2season(s, 'winter', 1)) / 90
 
-        df = pd.concat((df, self.features_filter(x)), axis=1)
+        df = pd.concat((df, x), axis=1)
         return df if not self.drop_date_col else df.drop(columns=self.date_col)
 
 
@@ -422,6 +422,6 @@ class DailyTargetExtendFeatures(TableFeatureGenerateMixin, TransformerMixin):
         assert isinstance(df, pd.DataFrame)
 
         x = self.weekday_groupby(df)
-        df = pd.concat((df, self.features_filter(x)), axis=1)
+        df = pd.concat((df, x), axis=1)
 
         return df
