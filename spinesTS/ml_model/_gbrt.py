@@ -146,7 +146,7 @@ class GBRTPreprocessing:
                 # columns sequence:
                 # lag_1, lag_2, lag_3, ..., lag_n, x_col_1, x_col_2, ..., x_col_n,
                 # date_fea_1, date_fea_2, ..., date_fea_n
-                if x_non_lag_train.shape[1] > 0 and x_non_lag_test.shape[1] > 0:
+                if len(x_non_lag_train) > 0 and len(x_non_lag_test) > 0:
                     if self.extend_daily_target_features:
                         return np.concatenate((x_train, tar_fea_x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
                             np.concatenate((x_test, tar_fea_x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
@@ -175,7 +175,7 @@ class GBRTPreprocessing:
                 _non_lag_fea, window_size=self.input_features, skip_steps=1, pred_steps=1
             )[:-self.output_features]
 
-            if split_non_lag_fea.shape[1] > 0:
+            if len(split_non_lag_fea) > 0:
                 if self.extend_daily_target_features:
                     return np.concatenate((split_tar, tar_fea_x, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
                 return np.concatenate((split_tar, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
