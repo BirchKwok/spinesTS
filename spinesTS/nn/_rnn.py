@@ -28,19 +28,23 @@ class EncoderDecoderBlock(nn.Module):
         self.linear = nn.Linear(decoder_input_features, out_features)
         self.selu = nn.SELU()
         self.dropout = nn.Dropout(dropout)
+        self.attention = nn.Linear(decoder_input_features, decoder_input_features)
 
     def forward(self, x, last_output):
         if x.ndim == 2:
             x = torch.unsqueeze(x, dim=1)
 
         if self.bidirectional:
-            x = torch.concat((x, x), dim=-1)
+            x = torch.cat((x, x), dim=-1)
 
         if last_output.ndim == 2:
             last_output = torch.unsqueeze(last_output, dim=1)
 
         _, (h, c) = self.encoder(last_output)
-        output, (h, c) = self.decoder(x, (h, c))
+        output, (_, _) = self.decoder(x, (h, c))
+
+        attention_weights = torch.softmax(self.attention(output), dim=1)
+        output = output * attention_weights  # Apply attention
 
         return self.selu(self.linear(output.squeeze()))
 
@@ -89,13 +93,13 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
     def __init__(self,
                  in_features: int,
                  out_features: int,
-                 stack_num=2,
-                 num_layers=2,
+                 stack_num=4,
+                 num_layers=1,
                  loss_fn='mae',
                  bias=True,
                  dropout=0.1,
                  bidirectional=True,
-                 diff_n=1,
+                 diff_n=0,
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
                  device='cpu'
