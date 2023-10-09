@@ -93,7 +93,7 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
     def __init__(self,
                  in_features: int,
                  out_features: int,
-                 stack_num=4,
+                 stack_num=10,
                  num_layers=1,
                  loss_fn='mae',
                  bias=True,
