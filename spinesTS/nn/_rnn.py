@@ -21,29 +21,26 @@ class EncoderDecoderBlock(nn.Module):
         self.encoder = nn.LSTM(in_features, in_features, num_layers=num_layers,
                                bias=bias, dropout=dropout, bidirectional=bidirectional, batch_first=True)
 
-        self.decoder = nn.LSTM(decoder_input_features, in_features, num_layers=num_layers,
+        self.decoder = nn.LSTM(in_features, in_features, num_layers=num_layers,
                                bias=bias, dropout=dropout, bidirectional=bidirectional, batch_first=True)
 
         self.linear = nn.Linear(decoder_input_features, out_features)
         self.selu = nn.SELU()
         self.dropout = nn.Dropout(dropout)
-        self.attention = nn.Linear(decoder_input_features, decoder_input_features)
+        self.attention = nn.Linear(in_features, in_features)
 
-    def forward(self, x, last_output):
+    def forward(self, x):
         if x.ndim == 2:
             x = torch.unsqueeze(x, dim=1)
 
-        if self.bidirectional:
-            x = torch.cat((x, x), dim=-1)
+        _, (h, c) = self.encoder(x)
 
-        if last_output.ndim == 2:
-            last_output = torch.unsqueeze(last_output, dim=1)
+        # if self.bidirectional:
+        #     x = torch.concat((x, ), dim=-1)
+        attention_weights = torch.softmax(self.attention(x), dim=1)
+        x = x * attention_weights  # Apply attention
 
-        _, (h, c) = self.encoder(last_output)
         output, (_, _) = self.decoder(x, (h, c))
-
-        attention_weights = torch.softmax(self.attention(output), dim=1)
-        output = output * attention_weights  # Apply attention
 
         return self.selu(self.linear(output.squeeze()))
 
@@ -73,17 +70,16 @@ class Seq2SeqBlock(nn.Module):
         self.linear_1 = nn.Linear(1024, out_features)
 
     def forward(self, x):
-        last_output = x
-        attention_weights = []
+        outputs = []
+
         for block in self.blocks:
-            last_output = block(x, last_output)
+            last_output = block(x)
+            last_output = last_output * torch.softmax(self.attention(last_output), dim=1)
+            outputs.append(last_output)
 
-            attention_weights.append(torch.softmax(self.attention(last_output), dim=1))
+        output = torch.mean(torch.stack(outputs), dim=0)
 
-        attention_weights = torch.mean(torch.stack(attention_weights, dim=0), dim=0)
-        last_output = last_output * attention_weights
-
-        output = self.linear_0(last_output.squeeze())
+        output = self.linear_0(output.squeeze())
         output = self.selu(output)
 
         return self.linear_1(output)
