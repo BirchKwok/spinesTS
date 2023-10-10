@@ -35,8 +35,6 @@ class EncoderDecoderBlock(nn.Module):
 
         _, (h, c) = self.encoder(x)
 
-        # if self.bidirectional:
-        #     x = torch.concat((x, ), dim=-1)
         attention_weights = torch.softmax(self.attention(x), dim=1)
         x = x * attention_weights  # Apply attention
 
@@ -89,7 +87,7 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
     def __init__(self,
                  in_features: int,
                  out_features: int,
-                 stack_num=10,
+                 stack_num=4,
                  num_layers=1,
                  loss_fn='mae',
                  bias=True,
