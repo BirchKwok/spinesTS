@@ -7,8 +7,7 @@ from spinesTS.base import TorchModelMixin, ForecastingMixin
 
 
 class EncoderDecoderBlock(nn.Module):
-    def __init__(self, in_features, out_features, num_layers=1, bias=True,
-                 dropout=0., bidirectional=False):
+    def __init__(self, in_features, out_features, num_layers=1, bias=True, dropout=0., bidirectional=False):
         super(EncoderDecoderBlock, self).__init__()
 
         if not bidirectional:
@@ -44,7 +43,7 @@ class EncoderDecoderBlock(nn.Module):
 
 
 class Seq2SeqBlock(nn.Module):
-    def __init__(self, in_features, out_features, stack_num=4, num_layers=1, bias=True,
+    def __init__(self, in_features, out_features, stack_num=4, num_layers=1, bias=True, nheads=8,
                  dropout=0., bidirectional=False):
         super(Seq2SeqBlock, self).__init__()
 
@@ -60,6 +59,9 @@ class Seq2SeqBlock(nn.Module):
             ]
         )
 
+        # Add a multi-head attention layer
+        self.multihead_attention = nn.MultiheadAttention(in_features, num_heads=nheads)
+
         self.attention = nn.Linear(in_features, in_features)
 
         self.linear_0 = nn.Linear(in_features, 1024)
@@ -72,11 +74,10 @@ class Seq2SeqBlock(nn.Module):
 
         for block in self.blocks:
             last_output = block(x)
-            last_output = last_output * torch.softmax(self.attention(last_output), dim=-1)
+            last_output, _ = self.multihead_attention(last_output, last_output, last_output)
             outputs.append(last_output)
 
         output = torch.mean(torch.stack(outputs), dim=0)
-
         output = self.linear_0(output.squeeze())
         output = self.selu(output)
 
