@@ -7,7 +7,8 @@ from spinesTS.base import TorchModelMixin, ForecastingMixin
 
 
 class EncoderDecoderBlock(nn.Module):
-    def __init__(self, in_features, out_features, num_layers=1, bias=True, dropout=0., bidirectional=False):
+    def __init__(self, in_features, out_features, num_layers=1, bias=True,
+                 dropout=0., bidirectional=False):
         super(EncoderDecoderBlock, self).__init__()
 
         if not bidirectional:
@@ -43,7 +44,7 @@ class EncoderDecoderBlock(nn.Module):
 
 
 class Seq2SeqBlock(nn.Module):
-    def __init__(self, in_features, out_features, stack_num=4, num_layers=1, bias=True, nheads=8,
+    def __init__(self, in_features, out_features, stack_num=4, num_layers=1, bias=True,
                  dropout=0., bidirectional=False):
         super(Seq2SeqBlock, self).__init__()
 
@@ -59,8 +60,7 @@ class Seq2SeqBlock(nn.Module):
             ]
         )
 
-        # Add a multi-head attention layer
-        self.multihead_attention = nn.MultiheadAttention(1024, num_heads=nheads, add_bias_kv=True)
+        self.attention = nn.Linear(in_features, in_features)
 
         self.linear_0 = nn.Linear(in_features, 1024)
         self.selu = nn.SELU()
@@ -72,13 +72,13 @@ class Seq2SeqBlock(nn.Module):
 
         for block in self.blocks:
             last_output = block(x)
-            last_output = self.linear_0(last_output.squeeze())
-            last_output = self.selu(self.multihead_attention(last_output, last_output, last_output)[0])
+            last_output = last_output * torch.softmax(self.attention(last_output), dim=-1)
             outputs.append(last_output)
 
         output = torch.mean(torch.stack(outputs), dim=0)
 
-        # output = self.selu(output)
+        output = self.linear_0(output.squeeze())
+        output = self.selu(output)
 
         return self.linear_1(output)
 
@@ -95,18 +95,18 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
                  bidirectional=True,
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
-                 device='cpu',
-                 nheads=8
+                 device='cpu'
                  ) -> None:
         super(StackingRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.model, self.loss_fn, self.optimizer = self.call(stack_num=stack_num, num_layers=num_layers, bias=bias,
                                                              dropout=dropout,
-                                                             bidirectional=bidirectional, nheads=nheads)
+                                                             bidirectional=bidirectional)
 
     def call(self, stack_num, num_layers, bias,
-             dropout, bidirectional, nheads=8) -> tuple:
+             dropout,
+             bidirectional) -> tuple:
         model = Seq2SeqBlock(
             in_features=self.in_features,
             out_features=self.out_features,
@@ -114,7 +114,6 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
             num_layers=num_layers, bias=bias,
             dropout=dropout,
             bidirectional=bidirectional,
-            nheads=nheads
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
