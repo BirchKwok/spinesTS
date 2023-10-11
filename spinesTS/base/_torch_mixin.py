@@ -284,7 +284,7 @@ class TorchModelMixin:
 
             optimizer.step()
 
-            train_acc += self.metric(y.numpy(), np.squeeze(train_pred.detach().cpu().numpy()))
+            train_acc += self.metric(y.numpy().squeeze(), np.squeeze(train_pred.detach().cpu().numpy()))
             train_loss_current = train_loss.item()
 
         return train_loss_current, train_acc / train_batch
@@ -311,7 +311,7 @@ class TorchModelMixin:
                 pred = model(x_)
                 test_loss += loss_fn(pred, y_).item()  # scalar
                 # scalar
-                test_acc += self.metric(y_.cpu().numpy(), np.squeeze(pred.cpu().numpy()))
+                test_acc += self.metric(y_.cpu().numpy().squeeze(), np.squeeze(pred.cpu().numpy()))
 
         test_loss /= test_num_batches
         test_acc /= test_num_batches
