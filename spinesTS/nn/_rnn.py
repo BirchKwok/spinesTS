@@ -35,7 +35,7 @@ class EncoderDecoderBlock(nn.Module):
 
         _, (h, c) = self.encoder(x)
 
-        attention_weights = torch.softmax(self.attention(x), dim=1)
+        attention_weights = torch.softmax(self.attention(x), dim=-1)
         x = x * attention_weights  # Apply attention
 
         output, (_, _) = self.decoder(x, (h, c))
@@ -72,7 +72,7 @@ class Seq2SeqBlock(nn.Module):
 
         for block in self.blocks:
             last_output = block(x)
-            last_output = last_output * torch.softmax(self.attention(last_output), dim=1)
+            last_output = last_output * torch.softmax(self.attention(last_output), dim=-1)
             outputs.append(last_output)
 
         output = torch.mean(torch.stack(outputs), dim=0)
