@@ -4,79 +4,74 @@ import torch
 from torch import nn
 
 from spinesTS.base import TorchModelMixin, ForecastingMixin
+from spinesTS.layers._position_encoder import PositionalEncoding
 
 
 class EncoderDecoderBlock(nn.Module):
-    def __init__(self, in_features, out_features, num_layers=1, bias=True,
-                 dropout=0., bidirectional=False):
+    def __init__(self, in_features, out_features, bias=True,
+                 dropout=0.):
         super(EncoderDecoderBlock, self).__init__()
 
-        if not bidirectional:
-            decoder_input_features = in_features
-        else:
-            decoder_input_features = in_features * 2
+        self.encoder = nn.LSTM(in_features, in_features, num_layers=1,
+                               bias=bias, dropout=dropout,
+                               bidirectional=False, batch_first=True)
 
-        self.bidirectional = bidirectional
+        self.decoder_h = nn.Linear(in_features, out_features)
+        self.decoder_output = nn.Linear(in_features, out_features)
 
-        self.encoder = nn.LSTM(in_features, in_features, num_layers=num_layers,
-                               bias=bias, dropout=dropout, bidirectional=bidirectional, batch_first=True)
+        self.position_encoder = PositionalEncoding(in_features, in_features)
 
-        self.decoder = nn.LSTM(in_features, in_features, num_layers=num_layers,
-                               bias=bias, dropout=dropout, bidirectional=bidirectional, batch_first=True)
-
-        self.linear = nn.Linear(decoder_input_features, out_features)
+        self.linear_1 = nn.Linear(in_features * 3, 1024)
+        self.linear_2 = nn.Linear(1024, out_features)
         self.selu = nn.SELU()
-        self.dropout = nn.Dropout(dropout)
-        self.attention = nn.Linear(in_features, in_features)
 
     def forward(self, x):
         if x.ndim == 2:
             x = torch.unsqueeze(x, dim=1)
 
-        _, (h, c) = self.encoder(x)
+        output, (h, _) = self.encoder(x)
 
-        attention_weights = torch.softmax(self.attention(x), dim=-1)
-        x = x * attention_weights  # Apply attention
+        output_h = self.decoder_h(h)
+        output = self.decoder_output(output)
+        # output = output.squeeze() * output_h.squeeze()
 
-        output, (_, _) = self.decoder(x, (h, c))
+        output = torch.concat((output.squeeze(), output_h.squeeze()), dim=-1)
+        output = torch.concat((output, self.position_encoder(x).squeeze()), dim=-1)
 
-        return self.selu(self.linear(output.squeeze()))
+        output = self.selu(self.linear_1(output.squeeze()))
+
+        output = self.linear_2(output)
+        return output
 
 
 class Seq2SeqBlock(nn.Module):
-    def __init__(self, in_features, out_features, stack_num=4, num_layers=1, bias=True,
-                 dropout=0., bidirectional=False):
+    def __init__(self, in_features, out_features, bias=True,
+                 dropout=0.,):
         super(Seq2SeqBlock, self).__init__()
 
         self.in_features, self.out_features = in_features, out_features
 
-        self.blocks = nn.ModuleList(
-            [
-                EncoderDecoderBlock(
+        self.forward_block = EncoderDecoderBlock(
                     in_features=in_features,
-                    out_features=in_features, num_layers=num_layers,
-                    bias=bias, dropout=dropout, bidirectional=bidirectional
-                ) for i in range(stack_num)
-            ]
+                    out_features=in_features,
+                    bias=bias, dropout=dropout
         )
 
-        self.attention = nn.Linear(in_features, in_features)
+        self.backward_block = EncoderDecoderBlock(
+            in_features=in_features,
+            out_features=in_features,
+            bias=bias, dropout=dropout
+        )
 
-        self.linear_0 = nn.Linear(in_features, 1024)
+        self.linear_0 = nn.Linear(in_features * 3, 1024)
         self.selu = nn.SELU()
-
         self.linear_1 = nn.Linear(1024, out_features)
 
     def forward(self, x):
-        outputs = []
+        backward_output = self.backward_block(torch.flip(x, dims=[-1]))
+        forward_output = self.forward_block(x)
 
-        for block in self.blocks:
-            last_output = block(x)
-            last_output = last_output * torch.softmax(self.attention(last_output), dim=-1)
-            outputs.append(last_output)
-
-        output = torch.mean(torch.stack(outputs), dim=0)
-
+        output = torch.concat((x, forward_output, backward_output), dim=-1)
         output = self.linear_0(output.squeeze())
         output = self.selu(output)
 
@@ -87,12 +82,9 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
     def __init__(self,
                  in_features: int,
                  out_features: int,
-                 stack_num=4,
-                 num_layers=1,
                  loss_fn='mae',
                  bias=True,
-                 dropout=0.1,
-                 bidirectional=True,
+                 dropout=0.2,
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
                  device='cpu'
@@ -100,20 +92,16 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
         super(StackingRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call(stack_num=stack_num, num_layers=num_layers, bias=bias,
-                                                             dropout=dropout,
-                                                             bidirectional=bidirectional)
+        self.model, self.loss_fn, self.optimizer = self.call(bias=bias,
+                                                             dropout=dropout)
 
-    def call(self, stack_num, num_layers, bias,
-             dropout,
-             bidirectional) -> tuple:
+    def call(self, bias,
+             dropout) -> tuple:
         model = Seq2SeqBlock(
             in_features=self.in_features,
             out_features=self.out_features,
-            stack_num=stack_num,
-            num_layers=num_layers, bias=bias,
+            bias=bias,
             dropout=dropout,
-            bidirectional=bidirectional,
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
