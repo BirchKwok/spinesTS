@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from spinesTS.base import TorchModelMixin, ForecastingMixin
-from spinesTS.layers._position_encoder import PositionalEncoding
+from spinesTS.layers import PositionalEncoding
 
 
 class EncoderDecoderBlock(nn.Module):
@@ -18,7 +18,7 @@ class EncoderDecoderBlock(nn.Module):
 
         self.decoder_output = nn.Linear(in_features, in_features)
 
-        self.position_encoder = PositionalEncoding(in_features, in_features)
+        self.position_encoder = PositionalEncoding(in_features)
 
         self.linear_1 = nn.Linear(in_features, 1024)
         self.linear_2 = nn.Linear(1024, out_features)
@@ -30,8 +30,10 @@ class EncoderDecoderBlock(nn.Module):
 
         _, (h, _) = self.encoder(x)
 
-        x = x.squeeze() + h.squeeze() + self.position_encoder(x).squeeze()
-        output = self.decoder_output(x)
+        x = self.position_encoder(x)
+        x = x.squeeze() + h.squeeze()
+
+        output = self.decoder_output(x.squeeze())
 
         output = self.selu(self.linear_1(output.squeeze()))
 
@@ -58,15 +60,21 @@ class Seq2SeqBlock(nn.Module):
             bias=bias, dropout=dropout
         )
 
-        self.linear_0 = nn.Linear(in_features * 3, 1024)
+        self.linear_0 = nn.Linear(in_features * 2, 1024)
         self.selu = nn.SELU()
         self.linear_1 = nn.Linear(1024, out_features)
+
+        self.position_encoder1 = PositionalEncoding(in_features, add_x=False)
+        self.position_encoder2 = PositionalEncoding(in_features, add_x=False)
+        self.position_encoder3 = PositionalEncoding(1024, add_x=False)
 
     def forward(self, x):
         backward_output = self.backward_block(torch.flip(x, dims=[-1]))
         forward_output = self.forward_block(x)
+        forward_output = forward_output + self.position_encoder1(forward_output.unsqueeze(dim=1))[0]
+        backward_output = backward_output + self.position_encoder2(backward_output.unsqueeze(dim=1))[0]
 
-        output = torch.concat((x, forward_output, backward_output), dim=-1)
+        output = torch.concat((forward_output, backward_output), dim=-1)
         output = self.linear_0(output.squeeze())
         output = self.selu(output)
 
