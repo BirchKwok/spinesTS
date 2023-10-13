@@ -11,3 +11,4 @@ from ._enhance_layers import (
     GAU
 )
 from ._multi_features import SeriesRecombinationLayer
+from ._position_encoder import PositionalEncoding
