@@ -16,12 +16,11 @@ class EncoderDecoderBlock(nn.Module):
                                bias=bias, dropout=dropout,
                                bidirectional=False, batch_first=True)
 
-        self.decoder_h = nn.Linear(in_features, out_features)
-        self.decoder_output = nn.Linear(in_features, out_features)
+        self.decoder_output = nn.Linear(in_features, in_features)
 
         self.position_encoder = PositionalEncoding(in_features, in_features)
 
-        self.linear_1 = nn.Linear(in_features * 3, 1024)
+        self.linear_1 = nn.Linear(in_features, 1024)
         self.linear_2 = nn.Linear(1024, out_features)
         self.selu = nn.SELU()
 
@@ -29,14 +28,10 @@ class EncoderDecoderBlock(nn.Module):
         if x.ndim == 2:
             x = torch.unsqueeze(x, dim=1)
 
-        output, (h, _) = self.encoder(x)
+        _, (h, _) = self.encoder(x)
 
-        output_h = self.decoder_h(h)
-        output = self.decoder_output(output)
-        # output = output.squeeze() * output_h.squeeze()
-
-        output = torch.concat((output.squeeze(), output_h.squeeze()), dim=-1)
-        output = torch.concat((output, self.position_encoder(x).squeeze()), dim=-1)
+        x = x.squeeze() + h.squeeze() + self.position_encoder(x).squeeze()
+        output = self.decoder_output(x)
 
         output = self.selu(self.linear_1(output.squeeze()))
 

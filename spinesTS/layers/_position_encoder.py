@@ -19,5 +19,5 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         # 将位置编码矩阵加到输入张量上
-        x = x + self.pe[:x.size(1), :]
-        return x
+        # x = x + self.pe[:x.size(1), :]
+        return self.pe[:x.size(1), :]
