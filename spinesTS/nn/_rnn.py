@@ -66,13 +66,13 @@ class Seq2SeqBlock(nn.Module):
 
         self.position_encoder1 = PositionalEncoding(in_features, add_x=False)
         self.position_encoder2 = PositionalEncoding(in_features, add_x=False)
-        self.position_encoder3 = PositionalEncoding(1024, add_x=False)
 
     def forward(self, x):
         backward_output = self.backward_block(torch.flip(x, dims=[-1]))
         forward_output = self.forward_block(x)
-        forward_output = forward_output + self.position_encoder1(forward_output.unsqueeze(dim=1))[0]
-        backward_output = backward_output + self.position_encoder2(backward_output.unsqueeze(dim=1))[0]
+
+        forward_output = forward_output + self.position_encoder1(forward_output).squeeze().mean(dim=1)
+        backward_output = backward_output + self.position_encoder2(backward_output).squeeze().mean(dim=1)
 
         output = torch.concat((forward_output, backward_output), dim=-1)
         output = self.linear_0(output.squeeze())
