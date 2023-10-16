@@ -187,7 +187,9 @@ class GBRTPreprocessing:
 
     @staticmethod
     def _process_x_non_lag_dim(x):
-        if x[:, -1, :].squeeze().ndim == 1:
+        if x[:, -1, :].squeeze().ndim == 1 and x[:, -1, :].ndim == 2:
+            return x[:, -1, :]
+        elif x[:, -1, :].squeeze().ndim == 1:
             return x[:, -1, :].squeeze(1)
         return x[:, -1, :].squeeze()
 
