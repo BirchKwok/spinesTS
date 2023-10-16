@@ -94,7 +94,7 @@ class GBRTPreprocessing:
         if isinstance(x, pd.DataFrame):
             if self.date_col is not None:
                 x = self.process_date_col(x)
-
+            # timestamp features
             _non_lag_fea = x.loc[:, [i for i in x.columns if i != self.target_col]].values
         else:
             if self.date_col is not None:
@@ -117,10 +117,11 @@ class GBRTPreprocessing:
 
                 x_non_lag, _ = split_series(_non_lag_fea, _tar, self.input_features,
                                             self.output_features, train_size=self.train_size)
+
                 if x_non_lag.shape[1] > 0:
                     if self.extend_daily_target_features:
-                        return np.concatenate((x, tar_fea_x, x_non_lag[:, -1, :].squeeze()), axis=1), y
-                    return np.concatenate((x, x_non_lag[:, -1, :].squeeze()), axis=1), y
+                        return np.concatenate((x, tar_fea_x, self._process_x_non_lag_dim(x_non_lag)), axis=1), y
+                    return np.concatenate((x, self._process_x_non_lag_dim(x_non_lag)), axis=1), y
                 else:
                     if self.extend_daily_target_features:
                         return np.concatenate((x, tar_fea_x), axis=1), y
@@ -148,10 +149,10 @@ class GBRTPreprocessing:
                 # date_fea_1, date_fea_2, ..., date_fea_n
                 if len(x_non_lag_train) > 0 and len(x_non_lag_test) > 0:
                     if self.extend_daily_target_features:
-                        return np.concatenate((x_train, tar_fea_x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
-                            np.concatenate((x_test, tar_fea_x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
-                    return np.concatenate((x_train, x_non_lag_train[:, -1, :].squeeze()), axis=1), \
-                        np.concatenate((x_test, x_non_lag_test[:, -1, :].squeeze()), axis=1), y_train, y_test
+                        return np.concatenate((x_train, tar_fea_x_train, self._process_x_non_lag_dim(x_non_lag_train)), axis=1), \
+                            np.concatenate((x_test, tar_fea_x_test, self._process_x_non_lag_dim(x_non_lag_test)), axis=1), y_train, y_test
+                    return np.concatenate((x_train, self._process_x_non_lag_dim(x_non_lag_train)), axis=1), \
+                        np.concatenate((x_test, self._process_x_non_lag_dim(x_non_lag_test)), axis=1), y_train, y_test
                 else:
                     if self.extend_daily_target_features:
                         np.concatenate((x_train, tar_fea_x_train), axis=1), \
@@ -177,13 +178,18 @@ class GBRTPreprocessing:
 
             if len(split_non_lag_fea) > 0:
                 if self.extend_daily_target_features:
-                    return np.concatenate((split_tar, tar_fea_x, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
-                return np.concatenate((split_tar, split_non_lag_fea[:, -1, :].squeeze()), axis=1)
+                    return np.concatenate((split_tar, tar_fea_x, self._process_x_non_lag_dim(split_non_lag_fea)), axis=1)
+                return np.concatenate((split_tar, self._process_x_non_lag_dim(split_non_lag_fea)), axis=1)
             else:
                 if self.extend_daily_target_features:
                     return np.concatenate((split_tar, tar_fea_x), axis=1)
                 return split_tar
 
+    @staticmethod
+    def _process_x_non_lag_dim(x):
+        if x[:, -1, :].squeeze().ndim == 1:
+            return x[:, -1, :].squeeze(1)
+        return x[:, -1, :].squeeze()
 
 class WideGBRT(ForecastingMixin):
     def __init__(self, model, scaler=None, is_pipeline=False):
