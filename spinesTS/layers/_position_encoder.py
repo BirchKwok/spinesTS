@@ -24,5 +24,5 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         if self.add_x:
-            return x + self.pe[:, :x.size(1)]
-        return self.pe[:, :x.size(1)]
+            return x + self.pe[:, :x.shape[1]]
+        return self.pe[:, :x.shape[1]]

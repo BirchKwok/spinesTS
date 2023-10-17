@@ -71,6 +71,11 @@ class Seq2SeqBlock(nn.Module):
         backward_output = self.backward_block(torch.flip(x, dims=[-1]))
         forward_output = self.forward_block(x)
 
+        if backward_output.ndim == 1:
+            backward_output = backward_output.unsqueeze(0)
+        if forward_output.ndim == 1:
+            forward_output = forward_output.unsqueeze(0)
+
         forward_output = forward_output + self.position_encoder1(forward_output).squeeze().mean(dim=1)
         backward_output = backward_output + self.position_encoder2(backward_output).squeeze().mean(dim=1)
 
