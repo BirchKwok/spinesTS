@@ -4,7 +4,6 @@ import torch
 from torch import nn
 
 from spinesTS.base import TorchModelMixin, ForecastingMixin
-from spinesTS.layers import PositionalEncoding3D
 
 
 def get_even_blocks(in_features, window_size):
@@ -37,7 +36,7 @@ class SegmentationBlock(nn.Module):
         self.encoders = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(self.window_size, self.window_size),
-                nn.ReLU()
+                nn.SELU()
             )
             for i in range(self.blocks)
         ])
@@ -60,7 +59,7 @@ class SegmentationBlock(nn.Module):
 
 
 class SegRNNBlock(nn.Module):
-    def __init__(self, in_features, out_features, dropout=0.1):
+    def __init__(self, in_features, out_features):
         super(SegRNNBlock, self).__init__()
 
         if in_features < 24:
@@ -69,18 +68,18 @@ class SegRNNBlock(nn.Module):
         self.splitter = SegmentationBlock(in_features=in_features, window_size=12)
         window_size = self.splitter.window_size
 
-        self.rnn = nn.GRU(window_size, window_size, num_layers=1,
-                          bias=True, bidirectional=False, batch_first=True)
+        self.encoder_rnn = nn.GRU(window_size, window_size, num_layers=1,
+                                  bias=True, bidirectional=False, batch_first=True)
 
-        self.block_position_encoder = PositionalEncoding3D(d_model=window_size)
-        self.channel_position_encoder = PositionalEncoding3D(d_model=self.splitter.blocks)
+        self.decoder_rnn = nn.GRU(window_size, window_size, num_layers=1,
+                                  bias=True, bidirectional=False, batch_first=True)
 
         out_window_size = out_features // self.splitter.blocks + int(out_features % self.splitter.blocks > 0)
 
         self.decoders = nn.ModuleList([
             nn.Sequential(
-                nn.Dropout(dropout),
                 nn.Linear(window_size, 1024),
+                nn.SELU(),
                 nn.Linear(1024, out_window_size)
             )
             for i in range(self.splitter.blocks)
@@ -89,25 +88,13 @@ class SegRNNBlock(nn.Module):
         self.out_features = out_features
 
     def forward(self, x):
+        assert x.shape[1] % 2 == 0, "Only even numbers of columns are accepted."
+
         x = self.splitter(x)  # [batch_size, blocks, window_size]
 
-        _, h = self.rnn(x)
+        _, h = self.encoder_rnn(x)
 
-        pos_enc = self.block_position_encoder(x)
-
-        channel_encs = self.channel_position_encoder(torch.randn(x.shape[0], x.shape[1], self.splitter.blocks))
-
-        channel_enc = torch.empty(pos_enc.size(0), pos_enc.size(1), pos_enc.size(2), device=x.device)
-
-        # 沿轴复制元素
-        for _ in range(channel_encs.shape[2]):
-            for _2 in range(self.splitter.blocks):
-                if _ * self.splitter.blocks + _2 < pos_enc.size(2):
-                    channel_enc[:, :, _ * self.splitter.blocks + _2] = channel_encs[:, :, _]
-
-        x_enc = x + pos_enc + channel_enc
-
-        output, _ = self.rnn(x_enc, h)
+        output, _ = self.decoder_rnn(x, h)
 
         res = []
         for i in range(self.splitter.blocks):
@@ -126,11 +113,11 @@ class SegRNN(TorchModelMixin, ForecastingMixin):
     LIN S. SegRNN: Segment Recurrent Neural Network for Long-Term Time Series Forecasting[J]. 2023.
     arXiv preprint arXiv:2308.11200
     """
+
     def __init__(self,
                  in_features: int,
                  out_features: int,
                  loss_fn='mae',
-                 dropout=0.1,
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
                  device='cpu'
@@ -138,13 +125,12 @@ class SegRNN(TorchModelMixin, ForecastingMixin):
         super(SegRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call(dropout=dropout)
+        self.model, self.loss_fn, self.optimizer = self.call()
 
-    def call(self, dropout) -> tuple:
+    def call(self) -> tuple:
         model = SegRNNBlock(
             in_features=self.in_features,
-            out_features=self.out_features,
-            dropout=dropout
+            out_features=self.out_features
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
