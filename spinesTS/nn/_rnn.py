@@ -22,7 +22,7 @@ class EncoderDecoderBlock(nn.Module):
 
         self.linear_1 = nn.Linear(in_features, 1024)
         self.linear_2 = nn.Linear(1024, out_features)
-        self.selu = nn.SELU()
+        self.gelu = nn.GELU()
 
     def forward(self, x):
         if x.ndim == 2:
@@ -35,7 +35,7 @@ class EncoderDecoderBlock(nn.Module):
 
         output = self.decoder_output(x.squeeze())
 
-        output = self.selu(self.linear_1(output.squeeze()))
+        output = self.gelu(self.linear_1(output.squeeze()))
 
         output = self.linear_2(output)
         return output
@@ -61,7 +61,7 @@ class Seq2SeqBlock(nn.Module):
         )
 
         self.linear_0 = nn.Linear(in_features * 2, 1024)
-        self.selu = nn.SELU()
+        self.gelu = nn.GELU()
         self.linear_1 = nn.Linear(1024, out_features)
 
         self.position_encoder1 = PositionalEncoding(in_features, add_x=False)
@@ -81,7 +81,7 @@ class Seq2SeqBlock(nn.Module):
 
         output = torch.concat((forward_output, backward_output), dim=-1)
         output = self.linear_0(output.squeeze())
-        output = self.selu(output)
+        output = self.gelu(output)
 
         return self.linear_1(output)
 
