@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import scipy
 
 from spinesTS.base import ForecastingMixin
 from spinesTS.ml_model import MultiOutputRegressor
@@ -45,8 +46,30 @@ class GBRTPreprocessing:
         p25 = np.percentile(x, q=25, axis=1).reshape((-1, 1))
         p75 = np.percentile(x, q=75, axis=1).reshape((-1, 1))
         std = np.std(x, axis=1).reshape((-1, 1))
+        entropy = scipy.stats.entropy(x, base=2, axis=1).reshape((-1, 1))
+        avg_diff = np.diff(x, n=1, axis=1).mean(axis=1).reshape((-1, 1))
+        avg_abs_diff = np.abs(np.diff(x, n=1, axis=1)).mean(axis=1).reshape((-1, 1))
+        avg_median_diff = np.percentile(np.diff(x, n=1, axis=1), q=50, axis=1).reshape((-1, 1))
+        avg_abs_median_diff = np.percentile(np.abs(np.diff(x, n=1, axis=1)), q=50, axis=1).reshape((-1, 1))
 
-        return np.concatenate((mean_res, median_res, max_res, min_res, p25, p75, std), axis=1)
+        autocorrelation = scipy.signal.correlate(x, x, mode='same')
+        autocorrelation_diff = scipy.signal.correlate(x, np.diff(x, n=1, axis=1), mode='same')
+
+        percentile_count_under_75 = ((x < np.percentile(x, q=75, axis=1).reshape((-1, 1))).sum(axis=1)
+                                     .astype(int).reshape((-1, 1)))
+        percentile_count_under_25 = ((x < np.percentile(x, q=25, axis=1).reshape((-1, 1))).sum(axis=1)
+                                     .astype(int).reshape((-1, 1)))
+        percentile_count_under_90 = ((x < np.percentile(x, q=90, axis=1).reshape((-1, 1))).sum(axis=1)
+                                     .astype(int).reshape((-1, 1)))
+        percentile_count_over_90 = ((x > np.percentile(x, q=90, axis=1).reshape((-1, 1))).sum(axis=1)
+                                    .astype(int).reshape((-1, 1)))
+
+        return np.concatenate(
+            (mean_res, median_res, max_res, min_res, p25, p75, std, entropy,
+             avg_diff, avg_abs_diff, avg_median_diff, avg_abs_median_diff, autocorrelation, autocorrelation_diff,
+             percentile_count_under_75, percentile_count_under_25, percentile_count_under_90, percentile_count_over_90
+             ),
+            axis=1)
 
     def check_x_types(self, x):
         assert isinstance(x, (pd.DataFrame, np.ndarray))
