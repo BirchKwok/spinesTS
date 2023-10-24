@@ -8,7 +8,7 @@ from spinesTS.layers import PositionalEncoding
 
 
 class EncoderDecoderBlock(nn.Module):
-    def __init__(self, in_features, out_features, bias=True,
+    def __init__(self, in_features, out_features, bias=False,
                  dropout=0.):
         super(EncoderDecoderBlock, self).__init__()
 
@@ -20,8 +20,7 @@ class EncoderDecoderBlock(nn.Module):
 
         self.position_encoder = PositionalEncoding(in_features)
 
-        self.linear_1 = nn.Linear(in_features, 1024)
-        self.linear_2 = nn.Linear(1024, out_features)
+        self.linear = nn.Linear(in_features, out_features)
         self.gelu = nn.GELU()
 
     def forward(self, x):
@@ -35,14 +34,13 @@ class EncoderDecoderBlock(nn.Module):
 
         output = self.decoder_output(x.squeeze())
 
-        output = self.gelu(self.linear_1(output.squeeze()))
+        output = self.gelu(self.linear(output.squeeze()))
 
-        output = self.linear_2(output)
         return output
 
 
 class Seq2SeqBlock(nn.Module):
-    def __init__(self, in_features, out_features, bias=True,
+    def __init__(self, in_features, out_features, bias=False,
                  dropout=0.,):
         super(Seq2SeqBlock, self).__init__()
 
@@ -60,9 +58,9 @@ class Seq2SeqBlock(nn.Module):
             bias=bias, dropout=dropout
         )
 
-        self.linear_0 = nn.Linear(in_features * 2, 1024)
+        self.linear_0 = nn.Linear(in_features * 2, 256)
         self.gelu = nn.GELU()
-        self.linear_1 = nn.Linear(1024, out_features)
+        self.linear_1 = nn.Linear(256, out_features)
 
         self.position_encoder1 = PositionalEncoding(in_features, add_x=False)
         self.position_encoder2 = PositionalEncoding(in_features, add_x=False)
@@ -91,8 +89,8 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
                  in_features: int,
                  out_features: int,
                  loss_fn='mae',
-                 bias=True,
-                 dropout=0.2,
+                 bias=False,
+                 dropout=0.1,
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
                  device='auto'

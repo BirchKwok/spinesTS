@@ -71,18 +71,18 @@ class SegRNNBlock(nn.Module):
         window_size = self.splitter.window_size
 
         self.encoder_rnn = nn.GRU(window_size, window_size, num_layers=1,
-                                  bias=True, bidirectional=False, batch_first=True)
+                                  bias=False, bidirectional=False, batch_first=True)
 
         self.decoder_rnn = nn.GRU(window_size, window_size, num_layers=1,
-                                  bias=True, bidirectional=False, batch_first=True)
+                                  bias=False, bidirectional=False, batch_first=True)
 
         out_window_size = out_features // self.splitter.blocks + int(out_features % self.splitter.blocks > 0)
 
         self.decoders = nn.ModuleList([
             nn.Sequential(
-                nn.Linear(window_size, 1024),
+                nn.Linear(window_size, 256),
                 nn.GELU(),
-                nn.Linear(1024, out_window_size)
+                nn.Linear(256, out_window_size)
             )
             for i in range(self.splitter.blocks)
         ])
