@@ -7,11 +7,16 @@ import torch
 from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 
-from spinesTS.metrics import WMAPELoss, mean_absolute_error as mae, RMSELoss
+from spinesUtils.asserts import ParameterValuesAssert, augmented_isinstance, ParameterTypeAssert
+
+from spinesTS.metrics import WMAPELoss, RMSELoss
 from spinesTS.utils import seed_everything, check_is_fitted
 
 
-def set_device(device=None):
+@ParameterValuesAssert({
+    'device': lambda s: augmented_isinstance(s, (None, str))
+})
+def set_device(device='auto'):
     """Set device
     
     Parameters
@@ -25,19 +30,22 @@ def set_device(device=None):
     device, after setting.
     
     """
-    if device is None:
+    if device is None or device == 'auto':
         if torch.cuda.is_available():
             device = 'cuda:0' if torch.cuda.device_count() > 1 else 'cuda'
-        # Because the mps approach predicts far less accurately than the cpu approach
+        # The mps approach predicts far less accurately than the cpu approach
         # during the developer's development process.
-        # elif torch.backends.mps.is_available():
-        #     device = 'mps'
+        elif torch.backends.mps.is_available():
+            device = 'mps'
         else:
             device = 'cpu'
 
     return device
 
 
+@ParameterValuesAssert({
+    'name': lambda s: augmented_isinstance(s, (None, str))
+})
 def get_loss_func(name=None):
     """get loss function
 
@@ -105,7 +113,7 @@ class TorchModelMixin:
 
     """
 
-    def __init__(self, seed=None, device=None, loss_fn='mae') -> None:
+    def __init__(self, seed=None, device='auto', loss_fn='mae') -> None:
         self.training_logs = {
             'time_cost': [],
             'epochs': [],
@@ -143,7 +151,7 @@ class TorchModelMixin:
             monitor='val_loss',
             min_delta=0,
             patience=10,
-            lr_scheduler=None,
+            lr_scheduler='CosineAnnealingLR',
             lr_scheduler_patience=10,
             lr_factor=0.1,
             restore_best_weights=True,
@@ -185,7 +193,6 @@ class TorchModelMixin:
         self
 
         """
-        # self.model = torch.compile(self.model)  # mac mps or python 3.11 not supported yet
         if verbose:
             print(f"Using {self.device} backend")
 
@@ -226,7 +233,7 @@ class TorchModelMixin:
 
     def metric(self, y_true, y_pred):
         """model metric"""
-        return mae(y_true, y_pred)
+        return nn.functional.l1_loss(y_true, y_pred)
 
     def _get_batch_size(self, x, batch_size='auto'):
         if batch_size == 'auto':
@@ -240,11 +247,11 @@ class TorchModelMixin:
         if isinstance(X, np.ndarray):
             X = torch.from_numpy(X)
         elif not isinstance(X, torch.Tensor):
-            X = torch.Tensor(X)
+            X = torch.as_tensor(X)
         if isinstance(y, np.ndarray):
             y = torch.from_numpy(y)
         elif not isinstance(y, torch.Tensor):
-            y = torch.Tensor(y)
+            y = torch.as_tensor(y)
 
         return X.float(), y.float()
 
@@ -269,25 +276,25 @@ class TorchModelMixin:
 
         model.train()  # set model to training mode
         train_batch = len(train_loader)
-        train_loss_current, train_acc = 0, 0
+        train_loss_current, train_metric = 0, 0
         for batch_ndx, (x, y) in enumerate(train_loader):
             x_, y_ = x.to(self.device), y.to(self.device)
 
             # compute error
             train_pred = model(x_)
             train_loss = loss_fn(train_pred, y_)
+            optimizer.zero_grad()  # clear optimizer gradient
 
             # backward
-            optimizer.zero_grad()  # clear optimizer gradient
             train_loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.)
 
             optimizer.step()
 
-            train_acc += self.metric(y.numpy().squeeze(), np.squeeze(train_pred.detach().cpu().numpy()))
-            train_loss_current = train_loss.item()
+            train_metric += self.metric(train_pred, y_)
+            train_loss_current = train_loss.item()  # 释放图形指针
 
-        return train_loss_current, train_acc / train_batch
+        return train_loss_current, train_metric / train_batch
 
     def test_on_one_epoch(
             self,
@@ -304,34 +311,40 @@ class TorchModelMixin:
         test_loader = dataloader
 
         model.eval()  # set model to evaluate mode
-        test_loss, test_acc, test_num_batches = 0, 0, len(test_loader)
+        test_loss, test_metric, test_num_batches = 0, 0, len(test_loader)
         with torch.no_grad():  # with no gradient
             for batch_ndx, (x_, y_) in enumerate(test_loader):
                 x_, y_ = x_.to(self.device), y_.to(self.device)
                 pred = model(x_)
                 test_loss += loss_fn(pred, y_).item()  # scalar
                 # scalar
-                test_acc += self.metric(y_.cpu().numpy().squeeze(), np.squeeze(pred.cpu().numpy()))
+                test_metric += self.metric(y_, pred)
 
         test_loss /= test_num_batches
-        test_acc /= test_num_batches
+        test_metric /= test_num_batches
 
-        return test_loss, test_acc
+        return test_loss, test_metric
 
+    @ParameterTypeAssert({
+        'min_delta': int,
+        'patience': int,
+        'restore_best_weights': bool
+    })
+    @ParameterValuesAssert({
+        'loss_type': ('min', 'max')
+    })
     def _early_stopping(
             self,
             loss,
-            loss_type='down',
+            loss_type='min',
             min_delta=0,
             patience=10,
             restore_best_weights=True
     ):
         """
-        loss type : rise or down
+        loss type : min or max
         """
-        assert loss_type in ('down', 'rise')
-
-        if loss_type == 'rise':
+        if loss_type == 'max':
             loss = -loss
 
         if loss < (self.current_loss + min_delta):
@@ -351,7 +364,7 @@ class TorchModelMixin:
 
     def _get_lr_scheduler(
             self, mode=None,
-            lr_scheduler='ReduceLROnPlateau',
+            lr_scheduler='CosineAnnealingLR',
             lr_scheduler_patience=10,
             lr_factor=0.1,
             **lr_scheduler_kwargs
@@ -388,7 +401,7 @@ class TorchModelMixin:
                                           f"{total_epochs:>1d}  " + \
                                           f"\n\r{self.training_logs['batches'][-1]}/{self.training_logs['batches'][-1]}"
 
-        training_log_print["lr_msg"] = f"[*lr: {round(self.training_logs['lrs'][-1], 5)}]" if len(
+        training_log_print["lr_msg"] = f"[*lr: {self.training_logs['lrs'][-1]:4e}]" if len(
             str(self.training_logs['lrs'][-1])) <= 5 else f" [*lr: {self.training_logs['lrs'][-1]:>5}]"
 
         training_log_print["loss_msg"] = f"loss: {self.training_logs['train_loss'][-1]:>.4f} - " + \
@@ -428,12 +441,12 @@ class TorchModelMixin:
             epochs=1000,
             batch_size='auto',
             eval_set=None,
-            loss_type='down',
+            loss_type='min',
             metrics_name='score',
             monitor='val_loss',
             min_delta=0,
             patience=10,
-            lr_scheduler='ReduceLROnPlateau',
+            lr_scheduler='CosineAnnealingLR',
             lr_scheduler_patience=10,
             lr_factor=0.1,
             restore_best_weights=True,
@@ -446,7 +459,7 @@ class TorchModelMixin:
         """
 
         assert eval_set is None or isinstance(eval_set, (list, tuple))
-        assert monitor in ('loss', 'val_loss', None)
+        assert monitor in ('train_loss', 'val_loss', None)
 
         init_lr = copy.deepcopy(self.learning_rate)
 
@@ -467,7 +480,7 @@ class TorchModelMixin:
 
         batches = int(np.ceil(len(X) / self._batch_size))
 
-        mode = ('max', 'min')[loss_type == 'down']
+        mode = loss_type
 
         scheduler = self._get_lr_scheduler(
             mode=mode, lr_scheduler=lr_scheduler,
@@ -489,12 +502,12 @@ class TorchModelMixin:
             if lr_scheduler:
                 scheduler.step() if lr_scheduler != 'ReduceLROnPlateau' else scheduler.step(train_loss_current)
 
-            self.training_logs['lrs'].append(self.optimizer.state_dict()['param_groups'][0]['lr'])
+            self.training_logs['lrs'].append(round(float(self.optimizer.state_dict()['param_groups'][0]['lr']), 7))
 
             self.training_logs['train_loss'].append(train_loss_current)
             self.training_logs['train_accuracy'].append(train_acc)
 
-            if monitor == 'loss':
+            if monitor == 'train_loss':
                 stop_state = self._early_stopping(train_loss_current, loss_type=loss_type,
                                                   min_delta=min_delta, patience=patience,
                                                   restore_best_weights=restore_best_weights)

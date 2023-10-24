@@ -36,7 +36,7 @@ class SegmentationBlock(nn.Module):
         self.encoders = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(self.window_size, self.window_size),
-                nn.SELU()
+                nn.GELU()
             )
             for i in range(self.blocks)
         ])
@@ -48,8 +48,10 @@ class SegmentationBlock(nn.Module):
             xs = [x]
         else:
             xs = list(torch.split(x, self.window_size, dim=1))
-            xs[-1] = torch.concat([xs[-1], torch.zeros(xs[-1].shape[0],
-                                                       self.window_size - xs[-1].shape[1])], dim=1)
+            completed_data = torch.zeros(xs[-1].shape[0],
+                                         self.window_size - xs[-1].shape[1]).type_as(xs[-1])
+
+            xs[-1] = torch.concat([xs[-1], completed_data], dim=1)
 
         res = []
         for i in range(self.blocks):
@@ -79,7 +81,7 @@ class SegRNNBlock(nn.Module):
         self.decoders = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(window_size, 1024),
-                nn.SELU(),
+                nn.GELU(),
                 nn.Linear(1024, out_window_size)
             )
             for i in range(self.splitter.blocks)
@@ -120,12 +122,13 @@ class SegRNN(TorchModelMixin, ForecastingMixin):
                  loss_fn='mae',
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
-                 device='cpu'
+                 device='auto'
                  ) -> None:
         super(SegRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.model, self.loss_fn, self.optimizer = self.call()
+        self.loss_fn_name = loss_fn
 
     def call(self) -> tuple:
         model = SegRNNBlock(
@@ -144,14 +147,16 @@ class SegRNN(TorchModelMixin, ForecastingMixin):
             eval_set: Any = None,
             monitor: str = 'val_loss',
             min_delta: int = 0,
-            patience: int = 10,
-            lr_scheduler: Union[str, None] = 'ReduceLROnPlateau',
+            patience: int = 100,
+            lr_scheduler: Union[str, None] = 'CosineAnnealingLR',
             lr_scheduler_patience: int = 10,
             lr_factor: float = 0.7,
             restore_best_weights: bool = True,
+            loss_type='min',
             verbose: bool = True,
             **kwargs: Any) -> Any:
-        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
+        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type=loss_type,
+                           metrics_name=self.loss_fn_name,
                            monitor=monitor, lr_scheduler=lr_scheduler,
                            lr_scheduler_patience=lr_scheduler_patience,
                            lr_factor=lr_factor,

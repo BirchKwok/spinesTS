@@ -95,13 +95,14 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
                  dropout=0.2,
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
-                 device='cpu'
+                 device='auto'
                  ) -> None:
         super(StackingRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.model, self.loss_fn, self.optimizer = self.call(bias=bias,
                                                              dropout=dropout)
+        self.loss_fn_name = loss_fn
 
     def call(self, bias,
              dropout) -> tuple:
@@ -124,13 +125,15 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
             monitor: str = 'val_loss',
             min_delta: int = 0,
             patience: int = 10,
-            lr_scheduler: Union[str, None] = 'ReduceLROnPlateau',
+            lr_scheduler: Union[str, None] = 'CosineAnnealingLR',
             lr_scheduler_patience: int = 10,
             lr_factor: float = 0.7,
             restore_best_weights: bool = True,
             verbose: bool = True,
+            loss_type='min',
             **kwargs: Any) -> Any:
-        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
+        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type=loss_type,
+                           metrics_name=self.loss_fn_name,
                            monitor=monitor, lr_scheduler=lr_scheduler,
                            lr_scheduler_patience=lr_scheduler_patience,
                            lr_factor=lr_factor,

@@ -74,13 +74,14 @@ class GAUNet(TorchModelMixin, ForecastingMixin):
                  dropout: float = 0.,
                  learning_rate: float = 0.01,
                  random_seed: int = 42,
-                 device=None,
+                 device='auto',
                  loss_fn='mae'
                  ) -> None:
         super(GAUNet, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.flip_features = flip_features
+        self.loss_fn_name = loss_fn
         self.model, self.loss_fn, self.optimizer = self.call(level, skip_connect=skip_connect, dropout=dropout)
 
     def call(self,
@@ -101,13 +102,15 @@ class GAUNet(TorchModelMixin, ForecastingMixin):
             monitor: str = 'val_loss',
             min_delta: int = 0,
             patience: int = 10,
-            lr_scheduler: Union[str, None] = 'ReduceLROnPlateau',
+            lr_scheduler: Union[str, None] = 'CosineAnnealingLR',
             lr_scheduler_patience: int = 10,
             lr_factor: float = 0.7,
             restore_best_weights: bool = True,
             verbose: bool = True,
+            loss_type='min',
             **kwargs: Any) -> Any:
-        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type='down', metrics_name='mae',
+        return super().fit(X_train, y_train, epochs, batch_size, eval_set, loss_type=loss_type,
+                           metrics_name=self.loss_fn_name,
                            monitor=monitor, lr_scheduler=lr_scheduler,
                            lr_scheduler_patience=lr_scheduler_patience,
                            lr_factor=lr_factor,
