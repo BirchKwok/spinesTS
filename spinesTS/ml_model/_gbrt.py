@@ -12,6 +12,7 @@ from spinesTS.features_generator import DataExtendFeatures
 
 class GBRTPreprocessing:
     """WideGBRT features engineering class"""
+
     def __init__(self, in_features, out_features, target_col,
                  train_size=0.8, date_col=None, differential_n=0, moving_avg_n=0,
                  extend_daily_target_features=True
@@ -37,11 +38,8 @@ class GBRTPreprocessing:
 
     @staticmethod
     def process_target_col(x):
-        only_one_row = False
         if not x.ndim == 2:
             x = x.reshape(1, -1)
-            x = np.vstack((x, x))
-            only_one_row = True
 
         mean_res = x.mean(axis=1).reshape((-1, 1))
         median_res = np.percentile(x, q=50, axis=1).reshape((-1, 1))
@@ -69,14 +67,11 @@ class GBRTPreprocessing:
                                     .astype(int).reshape((-1, 1)))
 
         final_matrix = np.concatenate(
-                (mean_res, median_res, max_res, min_res, p25, p75, std, entropy,
-                 avg_diff, avg_abs_diff, avg_median_diff, avg_abs_median_diff, autocorrelation, autocorrelation_diff,
-                 percentile_count_under_75, percentile_count_under_25, percentile_count_under_90, percentile_count_over_90
-                 ),
-                axis=1)
-
-        if only_one_row:
-            return final_matrix[-1, :].reshape(1, -1)
+            (mean_res, median_res, max_res, min_res, p25, p75, std, entropy,
+             avg_diff, avg_abs_diff, avg_median_diff, avg_abs_median_diff, autocorrelation, autocorrelation_diff,
+             percentile_count_under_75, percentile_count_under_25, percentile_count_under_90, percentile_count_over_90
+             ),
+            axis=1)
 
         return final_matrix
 
@@ -121,7 +116,7 @@ class GBRTPreprocessing:
         if x.shape[1] != self.x_shape:
             raise ValueError("data shape does not match the shape of the data at the time of fitting.")
 
-        _tar = x[self.target_col].values if isinstance(x, pd.DataFrame) else x[:, self.target_col]
+        _tar = x[self.target_col].values.squeeze() if isinstance(x, pd.DataFrame) else x[:, self.target_col]
 
         if isinstance(x, pd.DataFrame):
             if self.date_col is not None:
@@ -181,8 +176,10 @@ class GBRTPreprocessing:
                 # date_fea_1, date_fea_2, ..., date_fea_n
                 if len(x_non_lag_train) > 0 and len(x_non_lag_test) > 0:
                     if self.extend_daily_target_features:
-                        return np.concatenate((x_train, tar_fea_x_train, self._process_x_non_lag_dim(x_non_lag_train)), axis=1), \
-                            np.concatenate((x_test, tar_fea_x_test, self._process_x_non_lag_dim(x_non_lag_test)), axis=1), y_train, y_test
+                        return np.concatenate((x_train, tar_fea_x_train, self._process_x_non_lag_dim(x_non_lag_train)),
+                                              axis=1), \
+                            np.concatenate((x_test, tar_fea_x_test, self._process_x_non_lag_dim(x_non_lag_test)),
+                                           axis=1), y_train, y_test
                     return np.concatenate((x_train, self._process_x_non_lag_dim(x_non_lag_train)), axis=1), \
                         np.concatenate((x_test, self._process_x_non_lag_dim(x_non_lag_test)), axis=1), y_train, y_test
                 else:
@@ -193,8 +190,7 @@ class GBRTPreprocessing:
         else:
             split_tar = lag_splits(
                 _tar, window_size=self.input_features, skip_steps=1, pred_steps=1
-            )[:-self.output_features]
-
+            )  # [:-self.output_features]
             if self.extend_daily_target_features:
                 tar_fea_x = self.process_target_col(split_tar)
 
@@ -206,11 +202,12 @@ class GBRTPreprocessing:
 
             split_non_lag_fea = lag_splits(
                 _non_lag_fea, window_size=self.input_features, skip_steps=1, pred_steps=1
-            )[:-self.output_features]
+            )  # [:-self.output_features]
 
             if len(split_non_lag_fea) > 0:
                 if self.extend_daily_target_features:
-                    return np.concatenate((split_tar, tar_fea_x, self._process_x_non_lag_dim(split_non_lag_fea)), axis=1)
+                    return np.concatenate((split_tar, tar_fea_x, self._process_x_non_lag_dim(split_non_lag_fea)),
+                                          axis=1)
                 return np.concatenate((split_tar, self._process_x_non_lag_dim(split_non_lag_fea)), axis=1)
             else:
                 if self.extend_daily_target_features:
@@ -225,10 +222,11 @@ class GBRTPreprocessing:
             return x[:, -1, :].squeeze(1)
         return x[:, -1, :].squeeze()
 
+
 class WideGBRT(ForecastingMixin):
     def __init__(self, model, scaler=None, is_pipeline=False):
         """
-        
+
         Parameters
         -----------
         model: estimator, note that estimator should implement the fit and predict method.
@@ -249,7 +247,7 @@ class WideGBRT(ForecastingMixin):
                     ('sc', scaler),
                     ('multi_reg', MultiOutputRegressor(model))
                 ])
-    
+
                 self.model = multi_reg
             else:
                 self.model = MultiOutputRegressor(model)
