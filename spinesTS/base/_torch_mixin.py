@@ -44,6 +44,16 @@ def set_device(device='auto'):
 
 
 @ParameterValuesAssert({
+    'device': lambda s: augmented_isinstance(s, (None, str))
+})
+def clear_torch_cache(device):
+    if device == 'cuda':
+        torch.cuda.empty_cache()
+    elif device == 'mps':
+        torch.mps.empty_cache()
+
+
+@ParameterValuesAssert({
     'name': lambda s: augmented_isinstance(s, (None, str))
 })
 def get_loss_func(name=None):
@@ -233,7 +243,7 @@ class TorchModelMixin:
 
     def metric(self, y_true, y_pred):
         """model metric"""
-        return nn.functional.l1_loss(y_true, y_pred)
+        return nn.functional.l1_loss(y_true, y_pred).item()
 
     def _get_batch_size(self, x, batch_size='auto'):
         if batch_size == 'auto':
@@ -272,17 +282,17 @@ class TorchModelMixin:
         If you want to override it, you just need to return two values,
         current loss on this epoch, average-accuracy on this epoch
         """
-        train_loader = dataloader
-
         model.train()  # set model to training mode
-        train_batch = len(train_loader)
+        train_batch = len(dataloader)
         train_loss_current, train_metric = 0, 0
-        for batch_ndx, (x, y) in enumerate(train_loader):
-            x_, y_ = x.to(self.device), y.to(self.device)
+
+        for x, y in dataloader:
+            clear_torch_cache(self.device)
+            x, y = x.to(self.device), y.to(self.device)
 
             # compute error
-            train_pred = model(x_)
-            train_loss = loss_fn(train_pred, y_)
+            train_pred = model(x)
+            train_loss = loss_fn(train_pred, y)
             optimizer.zero_grad()  # clear optimizer gradient
 
             # backward
@@ -291,10 +301,10 @@ class TorchModelMixin:
 
             optimizer.step()
 
-            train_metric += self.metric(train_pred, y_)
-            train_loss_current = train_loss.item()  # 释放图形指针
+            train_metric += self.metric(train_pred, y)
+            train_loss_current += train_loss.item()  # 释放图形指针
 
-        return train_loss_current, train_metric / train_batch
+        return train_loss_current / train_batch, train_metric / train_batch
 
     def test_on_one_epoch(
             self,
@@ -308,17 +318,17 @@ class TorchModelMixin:
         current loss on this epoch, average-accuracy on this epoch
 
         """
-        test_loader = dataloader
 
         model.eval()  # set model to evaluate mode
-        test_loss, test_metric, test_num_batches = 0, 0, len(test_loader)
+        test_loss, test_metric, test_num_batches = 0, 0, len(dataloader)
         with torch.no_grad():  # with no gradient
-            for batch_ndx, (x_, y_) in enumerate(test_loader):
-                x_, y_ = x_.to(self.device), y_.to(self.device)
-                pred = model(x_)
-                test_loss += loss_fn(pred, y_).item()  # scalar
+            for x, y in dataloader:
+                clear_torch_cache(self.device)
+                x, y = x.to(self.device), y.to(self.device)
+                pred = model(x)
+                test_loss += loss_fn(y, pred).item()  # scalar
                 # scalar
-                test_metric += self.metric(y_, pred)
+                test_metric += self.metric(y, pred)
 
         test_loss /= test_num_batches
         test_metric /= test_num_batches
@@ -326,6 +336,7 @@ class TorchModelMixin:
         return test_loss, test_metric
 
     @ParameterTypeAssert({
+        'loss_type': str,
         'min_delta': int,
         'patience': int,
         'restore_best_weights': bool
