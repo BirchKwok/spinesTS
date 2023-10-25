@@ -37,7 +37,8 @@ class GBRTPreprocessing:
 
     @staticmethod
     def process_target_col(x):
-        assert x.ndim == 2
+        if not x.ndim == 2:
+            x = x.reshape(1, -1)
 
         mean_res = x.mean(axis=1).reshape((-1, 1))
         median_res = np.percentile(x, q=50, axis=1).reshape((-1, 1))
