@@ -38,7 +38,7 @@ class GBRTPreprocessing:
     @staticmethod
     def process_target_col(x):
         if not x.ndim == 2:
-            x = x.reshape(1, -1)
+            x = np.vstack((x, x))
 
         mean_res = x.mean(axis=1).reshape((-1, 1))
         median_res = np.percentile(x, q=50, axis=1).reshape((-1, 1))
@@ -70,7 +70,7 @@ class GBRTPreprocessing:
              avg_diff, avg_abs_diff, avg_median_diff, avg_abs_median_diff, autocorrelation, autocorrelation_diff,
              percentile_count_under_75, percentile_count_under_25, percentile_count_under_90, percentile_count_over_90
              ),
-            axis=1)
+            axis=1)[-1, :].reshape(1, -1)
 
     def check_x_types(self, x):
         assert isinstance(x, (pd.DataFrame, np.ndarray))
