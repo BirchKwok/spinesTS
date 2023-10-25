@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='spinesTS',
-    version="0.3.17",
+    version="0.3.18",
     description='spinesTS, a powerful timeseries toolsets.',
     keywords='machine learning',
     packages=find_packages(),
@@ -23,7 +23,7 @@ setup(
     author_email='birchkwok@gmail.com',
     install_requires=[
         'scikit-learn>=1.0.2',
-        'torch>=2.1.0',
+        'torch>=2.0.0',
         'scipy>=1.7.0',
         'numpy>=1.17.0',
         'pandas>=2.0.0',

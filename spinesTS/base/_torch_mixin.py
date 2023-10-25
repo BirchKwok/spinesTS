@@ -8,9 +8,13 @@ from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 
 from spinesUtils.asserts import ParameterValuesAssert, augmented_isinstance, ParameterTypeAssert
+from spinesUtils.utils import Logger
 
 from spinesTS.metrics import WMAPELoss, RMSELoss
 from spinesTS.utils import seed_everything, check_is_fitted
+
+
+logger = Logger(with_time=False)
 
 
 @ParameterValuesAssert({
@@ -41,6 +45,40 @@ def set_device(device='auto'):
             device = 'cpu'
 
     return device
+
+
+@ParameterTypeAssert({
+    'device': str
+})
+def detect_available_device(device):
+    device = device.lower()
+    mps_available = False
+    cuda_available = False
+    cpu_available = False
+    mps_use = False
+    cuda_use = False
+    cpu_use = False
+
+    if torch.backends.mps.is_available():
+        mps_available = True
+        if device == 'mps':
+            mps_use = True
+    if torch.cuda.is_available():
+        cuda_available = True
+        if device == 'cuda':
+            cuda_use = True
+    if torch.cpu.is_available():
+        cpu_available = True
+        if device == 'cpu':
+            cpu_use = True
+
+    string_format = f"MPS  available: {mps_available}  | MPS  use: {mps_use}\n" + \
+                    f"CUDA available: {cuda_available} | CUDA use: {cuda_use}\n" + \
+                    f"CPU  available: {cpu_available}  | CPU  use: {cpu_use}"
+
+    return string_format
+
+
 
 
 @ParameterValuesAssert({
@@ -204,7 +242,7 @@ class TorchModelMixin:
 
         """
         if verbose:
-            print(f"Using {self.device} backend")
+            logger.print(detect_available_device(self.device))
 
         return self._fit(
             X,
@@ -293,7 +331,7 @@ class TorchModelMixin:
             # compute error
             train_pred = model(x)
             train_loss = loss_fn(train_pred, y)
-            optimizer.zero_grad()  # clear optimizer gradient
+            optimizer.zero_grad(set_to_none=True)  # clear optimizer gradient
 
             # backward
             train_loss.backward()
