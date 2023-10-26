@@ -243,6 +243,7 @@ class TorchModelMixin:
         """
         if verbose:
             logger.print(detect_available_device(self.device))
+            time.sleep(0.5)
 
         return self._fit(
             X,
