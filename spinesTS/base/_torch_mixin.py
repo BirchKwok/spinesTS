@@ -17,73 +17,69 @@ from spinesTS.utils import seed_everything, check_is_fitted
 logger = Logger(with_time=False)
 
 
-@ParameterValuesAssert({
-    'device': lambda s: augmented_isinstance(s, (None, str))
-})
-def set_device(device='auto'):
-    """Set device
-    
-    Parameters
-    ----------
-    device : None or str, default to cuda(if torch.cuda.is_available() is True
-        and only one gpu on the machine),
-        if multi gpu on the machine, default to cuda:0, else, default to cpu
-    
-    Returns
-    -------
-    device, after setting.
-    
-    """
-    if device is None or device == 'auto':
-        if torch.cuda.is_available():
-            device = 'cuda:0' if torch.cuda.device_count() > 1 else 'cuda'
-        # The mps approach predicts far less accurately than the cpu approach
-        # during the developer's development process.
-        elif torch.backends.mps.is_available():
-            device = 'mps'
-        else:
-            device = 'cpu'
-
-    return device
-
-
 @ParameterTypeAssert({
     'device': str
 })
-def detect_available_device(device):
-    device = device.lower()
+def detect_available_device(device='auto'):
+    if device != 'auto':
+        device = device.lower()
+        auto_selector = False
+    else:
+        auto_selector = True
+
+    tpu_available = False
+
+    try:
+        import torch_xla.core.xla_model as xm
+        device = xm.xla_device()
+
+        if device is not None:
+            tpu_available = True
+
+    except ImportError:
+        if device == 'tpu':
+            print("[ImportError]: torch_xla package is not installed."
+                  "Consider run `python3 -m pip install torch_xla` in your terminal.")
+
     mps_available = False
     cuda_available = False
     cpu_available = False
     mps_use = False
     cuda_use = False
     cpu_use = False
+    tpu_use = False
 
     if torch.backends.mps.is_available():
         mps_available = True
-        if device == 'mps':
-            mps_use = True
+
     if torch.cuda.is_available():
         cuda_available = True
-        if device == 'cuda':
-            cuda_use = True
+
     if torch.cpu.is_available():
         cpu_available = True
-        if device == 'cpu':
-            cpu_use = True
 
-    string_format = f"MPS  available: {mps_available}  | MPS  use: {mps_use}\n" + \
-                    f"CUDA available: {cuda_available} | CUDA use: {cuda_use}\n" + \
-                    f"CPU  available: {cpu_available}  | CPU  use: {cpu_use}"
+    if tpu_available and (auto_selector or device == 'tpu'):
+        device = xm.xla_device()
+        tpu_use = True
+    elif cuda_available and (auto_selector or device == 'cuda'):
+        device = 'cuda:0' if torch.cuda.device_count() > 1 else 'cuda'
+        cuda_use = True
+    elif mps_available and (auto_selector or device == 'mps'):
+        device = 'mps'
+        mps_use = True
+    elif cpu_available and (auto_selector or device == 'cpu'):
+        device = 'cpu'
+        cpu_use = True
 
-    return string_format
+    blank_length = lambda s: ' ' * 3 if s is True else ' ' * 2
+    string_format = f"MPS  available: {mps_available}{blank_length(mps_available)}| MPS  use: {mps_use}\n" \
+                    f"CUDA available: {cuda_available}{blank_length(cuda_available)}| CUDA use: {cuda_use}\n" \
+                    f"TPU  available: {tpu_available}{blank_length(tpu_available)}| TPU  use: {tpu_use}\n" \
+                    f"CPU  available: {cpu_available}{blank_length(cpu_available)}| CPU  use: {cpu_use}"
+
+    return device, string_format
 
 
-
-
-@ParameterValuesAssert({
-    'device': lambda s: augmented_isinstance(s, (None, str))
-})
 def clear_torch_cache(device):
     if device == 'cuda':
         torch.cuda.empty_cache()
@@ -123,7 +119,7 @@ class TorchModelMixin:
             def __init__(self, *args, **kwargs):
                 # need to set random seed if you needed
                 # need to set device which to put your tensor, default to cuda/cuda:0 if your gpu is available, else to cpu
-                super(Model, self).__init__(seed=None, device=None)  
+                super(Model, self).__init__(seed=None, device=None)
 
                 self.model, self.loss_fn, self.optimizer = self.call()  # implement your model architecture
 
@@ -175,7 +171,7 @@ class TorchModelMixin:
         }
 
         seed_everything(seed)
-        self.device = set_device(device)
+        self.device, self.string_format = detect_available_device(device)
         self.loss_fn_name = loss_fn
         self.loss_fn = get_loss_func(loss_fn)
         self.current_patience = 0
@@ -184,7 +180,7 @@ class TorchModelMixin:
 
     def call(self, *args, **kwargs):
         """To implement the model architecture.
-        
+
         """
         raise NotImplementedError("To implement a spinesTS.nn model class, you must implement a call function.")
 
@@ -219,18 +215,18 @@ class TorchModelMixin:
             it means the way to set the learning rate scheduler to watch the loss value (down or rise)
         metrics_name : str, names your metrics, default to 'score'
         monitor : str, 'val_loss' or 'loss', quantity to be monitored,
-        min_delta : minimum change in the monitored quantity to qualify as an improvement, 
+        min_delta : minimum change in the monitored quantity to qualify as an improvement,
             i.e. an absolute change of less than min_delta, will count as no improvement, default to 0
         patience : number of epochs with no improvement after which training will be stopped, default to 10
         lr_scheduler : learning rate scheduler name, one of ['ReduceLROnPlateau', 'CosineAnnealingLR',
             'CosineAnnealingWarmRestarts', None]
-        lr_scheduler_patience :  number of epochs with no improvement after which learning rate will be reduced. 
+        lr_scheduler_patience :  number of epochs with no improvement after which learning rate will be reduced.
             For example, if patience = 2, then we will ignore the first 2 epochs with no improvement,
             and will only decrease the LR after the 3rd epoch  if the loss still hasn’t improved then, default: 10
         lr_factor : factor by which the learning rate will be reduced. new_lr = lr * factor. Default: 0.1
         restore_best_weights : Whether to restore model weights
                         from the epoch with the best value of the monitored quantity.
-            If False, the model weights obtained at the last step of training are used. 
+            If False, the model weights obtained at the last step of training are used.
             If True, and if no epoch improves, training will run for patience epochs and restore weights from
                 the best epoch in that set. Default to True.
         verbose : Whether to  displays messages, default to True
@@ -242,7 +238,7 @@ class TorchModelMixin:
 
         """
         if verbose:
-            logger.print(detect_available_device(self.device))
+            logger.print(self.string_format)
             time.sleep(0.5)
 
         return self._fit(
@@ -286,7 +282,8 @@ class TorchModelMixin:
 
     def _get_batch_size(self, x, batch_size='auto'):
         if batch_size == 'auto':
-            self._batch_size = 32 if len(x) < 10000 else 64
+            self._batch_size = 2 ** np.log2(len(x)) * 16
+            self._batch_size = 5096 if self._batch_size > 5096 else self._batch_size
         else:
             assert isinstance(batch_size, int) and batch_size > 0
             self._batch_size = batch_size

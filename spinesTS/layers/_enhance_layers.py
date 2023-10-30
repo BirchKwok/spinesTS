@@ -59,8 +59,8 @@ class GAU(nn.Module):
     def __init__(
             self,
             in_features,
-            query_key_dim=128,
-            expansion_factor=2.,
+            query_key_dim=256,
+            expansion_factor=3.,
             skip_connect=True,
             dropout=0.,
     ):
