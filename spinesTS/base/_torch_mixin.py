@@ -43,7 +43,7 @@ def detect_available_device(device='auto'):
 
     mps_available = False
     cuda_available = False
-    cpu_available = False
+    cpu_available = True
     mps_use = False
     cuda_use = False
     cpu_use = False
@@ -54,9 +54,6 @@ def detect_available_device(device='auto'):
 
     if torch.cuda.is_available():
         cuda_available = True
-
-    if torch.cpu.is_available():
-        cpu_available = True
 
     if tpu_available and (auto_selector or device == 'tpu'):
         device = xm.xla_device()
