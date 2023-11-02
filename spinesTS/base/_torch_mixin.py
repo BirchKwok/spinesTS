@@ -18,9 +18,11 @@ logger = Logger(with_time=False)
 
 
 @ParameterTypeAssert({
-    'device': str
+    'device': (str, None)
 })
 def detect_available_device(device='auto'):
+    device = device or 'auto'
+
     if device != 'auto':
         device = device.lower()
         auto_selector = False
