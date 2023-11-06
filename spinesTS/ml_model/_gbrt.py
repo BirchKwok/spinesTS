@@ -7,7 +7,7 @@ from spinesTS.ml_model import MultiOutputRegressor
 from spinesTS.utils import check_is_fitted
 from spinesTS.pipeline import Pipeline
 from spinesTS.preprocessing import split_series, lag_splits, moving_average
-from spinesTS.features_generator import DataExtendFeatures
+from spinesTS.features_generator import DateExtendFeatures
 
 
 class GBRTPreprocessing:
@@ -34,7 +34,7 @@ class GBRTPreprocessing:
 
     def process_date_col(self, x):
         """Processing date column"""
-        return DataExtendFeatures(date_col=self.date_col, drop_date_col=True).fit_transform(x)
+        return DateExtendFeatures(date_col=self.date_col, drop_date_col=True).fit_transform(x)
 
     @staticmethod
     def process_target_col(x):

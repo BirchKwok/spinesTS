@@ -1,70 +1,46 @@
 import torch
 from torch import nn
 
-from spinesTS.layers import Time2Vec, MoveAvg
+from spinesTS.layers import Time2Vec
 from spinesTS.base import TorchModelMixin, ForecastingMixin
+from spinesTS.nn.utils import get_weight_norm
+
+# in case of using MPS
+import os
+os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = '0.0'
 
 
 class T2V(nn.Module):
-    def __init__(self, in_shapes, out_features, flip_features=False, ma_window_size=3):
+    def __init__(self, in_features, out_features, device=None):
         super(T2V, self).__init__()
-        assert isinstance(ma_window_size, int)
-        self.in_shape_type = type(in_shapes)
-        if self.in_shape_type == tuple:
-            rows, self.in_features = in_shapes
-        else:
-            self.in_features, self.out_features = in_shapes, out_features
+        weight_norm = get_weight_norm(device)
 
-        if ma_window_size > 0:
-            self.in_features = self.in_features - ma_window_size + 2
-            self.move_avg = MoveAvg(kernel_size=ma_window_size)
-        else:
-            self.move_avg = lambda s: s
+        self.in_features, self.out_features = in_features, out_features
+        self.t2v = Time2Vec(self.in_features, in_features)
 
-        self.t2v = Time2Vec(self.in_features)
-        if flip_features:
-            self.t2v2 = Time2Vec(self.in_features)
-            ln_layer_in_fea = 4 * self.in_features
-        else:
-            ln_layer_in_fea = 2 * self.in_features
+        self.lstm = nn.LSTM(self.in_features * 2 - 1, in_features,
+                            batch_first=True, bidirectional=False, bias=False)
 
-        if self.in_shape_type == tuple:
-            self.linear = nn.Linear(ln_layer_in_fea * rows, out_features)
-        else:
-            self.linear = nn.Linear(ln_layer_in_fea, out_features)
-
-        self.flip_features = flip_features
+        self.linear = weight_norm(nn.Linear(in_features, out_features))
 
     def forward(self, x):
-        x = self.move_avg(x)
-        x1 = self.t2v(x)
-        if self.flip_features:
-            _x = x.clone()
-            x2 = self.t2v2(torch.flip(_x, dims=[-1]))
-            x = torch.concat((x1, x2), dim=-1)
-        else:
-            x = x1
+        x = self.t2v(x)
+        output, (h, c) = self.lstm(x.unsqueeze(1))
 
-        if self.in_shape_type == tuple:
-            return self.linear(x.reshape(-1, x.shape[1] * x.shape[2]))
-        else:
-            return self.linear(x)
+        return self.linear(output.squeeze())
 
 
 class Time2VecNet(TorchModelMixin, ForecastingMixin):
-    def __init__(self, in_features, out_features, flip_features=False, learning_rate=0.01,
-                 random_seed=42, device='auto', ma_window_size=3, loss_fn='mae'):
+    def __init__(self, in_features, out_features, learning_rate=0.001,
+                 random_seed=42, device='auto', loss_fn='mae'):
         super(Time2VecNet, self).__init__(random_seed, device=device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.flip_features = flip_features
-        self.ma_window_size = ma_window_size
-        self.model, self.loss_fn, self.optimizer = self.call()
+        self.model, self.loss_fn, self.optimizer = self.call(device=device)
         self.loss_fn_name = loss_fn
 
-    def call(self):
-        model = T2V(self.in_features, self.out_features, flip_features=self.flip_features,
-                    ma_window_size=self.ma_window_size)
+    def call(self, device):
+        model = T2V(self.in_features, self.out_features, device=device)
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer

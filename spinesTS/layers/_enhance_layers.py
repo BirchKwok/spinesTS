@@ -1,6 +1,7 @@
 import torch
-from torch import nn
+from torch import nn, topk, fft
 from torch.nn import functional as F
+import numpy as np
 
 
 class GaussianNoise1d(nn.Module):
@@ -35,24 +36,24 @@ class Time2Vec(nn.Module):
     None
     """
 
-    def __init__(self, in_features):
+    def __init__(self, in_features, out_features):
         super(Time2Vec, self).__init__()
 
-        self.W = nn.Parameter(torch.randn(in_features, in_features))
-        self.P = nn.Parameter(torch.randn(in_features))
-        self.w = nn.Parameter(torch.randn(1))
-        self.p = nn.Parameter(torch.randn(1))
-        self.sine_w = nn.Parameter(torch.randn(1))
-        self.cosine_w = nn.Parameter(torch.randn(1))
+        self.W = nn.Parameter(torch.randn(in_features, 1))
+        self.P = nn.Parameter(torch.randn(1))
+        self.sin_w = nn.Parameter(torch.randn(in_features, out_features-1))
+        self.sin_p = nn.Parameter(torch.randn(out_features-1))
+        self.cos_w = nn.Parameter(torch.randn(in_features, out_features - 1))
+        self.cos_p = nn.Parameter(torch.randn(out_features - 1))
 
     def forward(self, x):
-        original = self.w * x + self.p
-        x = torch.matmul(x, self.W)
-        for i in range(x.shape[0]):
-            x[i, :] = self.sine_w * torch.sin(torch.squeeze(x[i]) + self.P) + \
-                      self.cosine_w * torch.cos(torch.squeeze(x[i]) + self.P)
+        original_sin = torch.sin(torch.matmul(x, self.sin_w) + self.sin_p)
+        original_cos = torch.cos(torch.matmul(x, self.cos_w) + self.cos_p)
 
-        return torch.concat((original, x), dim=-1)  # last dimension shape (, 2 * in_features)
+        x = torch.matmul(x, self.W) + self.P
+
+        # last dimension shape (-1, 2 * out_features - 1)
+        return torch.concat((original_sin, original_cos, x), dim=-1)
 
 
 class GAU(nn.Module):
@@ -123,3 +124,34 @@ class GAU(nn.Module):
             out = out + x
 
         return out
+
+
+class FFTTopKBlock(torch.nn.Module):
+    """
+    对传入的二维数组的每一行，进行快速傅里叶变换，并提取Top K个频率和幅值
+    """
+
+    def __init__(self, k=5):
+        super().__init__()
+        self.k = k
+
+    def forward(self, x):
+        # 假设你的时间序列数据存储在一个torch.Tensor对象中，命名为data
+        # data的维度为[batch_size, seq_length]
+
+        # 对时间序列执行FFT
+        fft_result = fft.fft(x)
+
+        # 计算FFT的幅值
+        amplitude = torch.abs(fft_result)
+
+        # 根据FFT的幅值排序并选择最具代表性的前K个趋势
+        top_k_amplitude, _ = torch.topk(amplitude, k=self.k, dim=1)
+
+        # 获取对应的频率信息
+        freqs = fft.fftfreq(x.shape[1])
+        top_k_freqs, _ = torch.topk(freqs, k=self.k)
+        # 频率
+        top_k_freqs = top_k_freqs.repeat(x.shape[0], 1)
+
+        return torch.concat((top_k_amplitude, top_k_freqs), dim=1)
