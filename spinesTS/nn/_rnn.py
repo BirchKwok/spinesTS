@@ -8,12 +8,16 @@ from spinesTS.layers import PositionalEncoding
 
 
 class EncoderDecoderBlock(nn.Module):
-    def __init__(self, in_features, out_features, bias=False,
-                 dropout=0.):
+    def __init__(
+            self,
+            in_features,
+            out_features,
+            bias=False
+    ):
         super(EncoderDecoderBlock, self).__init__()
 
         self.encoder = nn.LSTM(in_features, in_features, num_layers=1,
-                               bias=bias, dropout=dropout,
+                               bias=bias,
                                bidirectional=False, batch_first=True)
 
         self.decoder_output = nn.Linear(in_features, in_features)
@@ -40,44 +44,31 @@ class EncoderDecoderBlock(nn.Module):
 
 
 class Seq2SeqBlock(nn.Module):
-    def __init__(self, in_features, out_features, bias=False,
-                 dropout=0.,):
+    def __init__(self, in_features, out_features, bias=False):
         super(Seq2SeqBlock, self).__init__()
 
         self.in_features, self.out_features = in_features, out_features
 
         self.forward_block = EncoderDecoderBlock(
-                    in_features=in_features,
-                    out_features=in_features,
-                    bias=bias, dropout=dropout
-        )
-
-        self.backward_block = EncoderDecoderBlock(
             in_features=in_features,
             out_features=in_features,
-            bias=bias, dropout=dropout
+            bias=bias
         )
 
-        self.linear_0 = nn.Linear(in_features * 2, 256)
+        self.linear_0 = nn.Linear(in_features, 256)
         self.gelu = nn.GELU()
         self.linear_1 = nn.Linear(256, out_features)
 
         self.position_encoder1 = PositionalEncoding(in_features, add_x=False)
-        self.position_encoder2 = PositionalEncoding(in_features, add_x=False)
 
     def forward(self, x):
-        backward_output = self.backward_block(torch.flip(x, dims=[-1]))
         forward_output = self.forward_block(x)
 
-        if backward_output.ndim == 1:
-            backward_output = backward_output.unsqueeze(0)
         if forward_output.ndim == 1:
             forward_output = forward_output.unsqueeze(0)
 
-        forward_output = forward_output + self.position_encoder1(forward_output).squeeze().mean(dim=1)
-        backward_output = backward_output + self.position_encoder2(backward_output).squeeze().mean(dim=1)
+        output = forward_output + self.position_encoder1(forward_output).squeeze().mean(dim=1)
 
-        output = torch.concat((forward_output, backward_output), dim=-1)
         output = self.linear_0(output.squeeze())
         output = self.gelu(output)
 
@@ -90,7 +81,6 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
                  out_features: int,
                  loss_fn='mae',
                  bias=False,
-                 dropout=0.1,
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
                  device='auto'
@@ -98,17 +88,14 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
         super(StackingRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call(bias=bias,
-                                                             dropout=dropout)
+        self.model, self.loss_fn, self.optimizer = self.call(bias=bias)
         self.loss_fn_name = loss_fn
 
-    def call(self, bias,
-             dropout) -> tuple:
+    def call(self, bias) -> tuple:
         model = Seq2SeqBlock(
             in_features=self.in_features,
             out_features=self.out_features,
-            bias=bias,
-            dropout=dropout,
+            bias=bias
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
