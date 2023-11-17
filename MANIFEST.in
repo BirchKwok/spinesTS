@@ -1,2 +1,3 @@
 # include static datasets
 include spinesTS/data/built-in-datasets/*.csv
+include spinesTS/data/built-in-datasets/*.yaml

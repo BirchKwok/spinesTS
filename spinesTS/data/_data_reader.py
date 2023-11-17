@@ -1,6 +1,8 @@
 import re
 import pandas as pd
 import os
+
+import yaml
 from tabulate import tabulate
 
 from ..frame import DataTS
@@ -28,6 +30,28 @@ def _call_name(built_in_func, name):
     return wrap
 
 
+class DataWrapper(DataTS):
+    def __init__(self, dataset, name):
+        super().__init__(dataset, name)
+        self.fp = os.path.join(FILE_PATH, './built-in-datasets/metadata.yaml')
+        self.name = name
+
+    @property
+    def target_col(self):
+        with open(self.fp, 'r') as f:
+            return yaml.load(f, Loader=yaml.FullLoader)[self.name][0]['target_col']
+
+    @property
+    def feature_cols(self):
+        with open(self.fp, 'r') as f:
+            return yaml.load(f, Loader=yaml.FullLoader)[self.name][0]['feature_cols']
+
+    @property
+    def time_col(self):
+        with open(self.fp, 'r') as f:
+            return yaml.load(f, Loader=yaml.FullLoader)[self.name][0]['time_col']
+
+
 class BuiltInSeriesData:
     """Load the built-in data
 
@@ -51,7 +75,7 @@ class BuiltInSeriesData:
             self._FILEPATH = fp
         assert os.path.exists(self._FILEPATH), f'No such file or directory: {self._FILEPATH}'
 
-        return DataTS(pd.read_csv(self._FILEPATH, sep=','), name='.'.join(fp.split('.')[:-1]))
+        return DataWrapper(pd.read_csv(self._FILEPATH, sep=','), name='.'.join(fp.split('.')[:-1]))
 
     def __getitem__(self, item):
         if isinstance(item, int):

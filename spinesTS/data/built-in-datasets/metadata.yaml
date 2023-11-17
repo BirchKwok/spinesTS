@@ -1,0 +1,70 @@
+AirPassengers:
+  - time_col: Month
+    target_col: Passengers
+    feature_cols: ""
+ETTh1:
+  - time_col: date
+    target_col: OT
+    feature_cols:
+      - HUFL
+      - HULL
+      - MUFL
+      - MULL
+      - LUFL
+      - LULL
+ETTh2:
+  - time_col: date
+    target_col: OT
+    feature_cols:
+      - HUFL
+      - HULL
+      - MUFL
+      - MULL
+      - LUFL
+      - LULL
+ETTm1:
+  - time_col: date
+    target_col: OT
+    feature_cols:
+      - HUFL
+      - HULL
+      - MUFL
+      - MULL
+      - LUFL
+      - LULL
+ETTm2:
+  - time_col: date
+    target_col: OT
+    feature_cols:
+      - HUFL
+      - HULL
+      - MUFL
+      - MULL
+      - LUFL
+      - LULL
+Electric_Production:
+  - time_col: date
+    target_col: value
+    feature_cols: ""
+Messages_Sent:
+  - time_col: date
+    target_col: tc
+    feature_cols:
+      - ta
+      - tb
+Messages_Sent_Hour:
+  - time_col: date
+    target_col: tc
+    feature_cols:
+      - ta
+      - tb
+Supermarket_Incoming:
+  - time_col: date
+    target_col: goods_cnt
+    feature_cols: ""
+Web_Sales:
+  - time_col: date
+    target_col: sales_cnt
+    feature_cols:
+      - type_a
+      - type_b
