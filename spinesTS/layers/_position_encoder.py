@@ -28,3 +28,16 @@ class PositionalEncoding(nn.Module):
         return self.pe[:, :x.shape[1]]
 
 
+class LearnablePositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=512, add_x=True):
+        super(LearnablePositionalEncoding, self).__init__()
+        self.positional_encoding = nn.Embedding(max_len, d_model)
+        self.add_x = add_x
+
+    def forward(self, x):
+        seq_len = x.size(1)
+        positions = torch.arange(0, seq_len).long().to(x.device)
+        if not self.add_x:
+            return self.positional_encoding(positions)
+
+        return x + self.positional_encoding(positions)

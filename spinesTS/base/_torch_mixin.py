@@ -171,6 +171,9 @@ class TorchModelMixin:
 
         seed_everything(seed)
         self.device, self.string_format = detect_available_device(device)
+
+        clear_torch_cache(self.device)
+
         self.loss_fn_name = loss_fn
         self.loss_fn = get_loss_func(loss_fn)
         self.current_patience = 0
@@ -322,7 +325,6 @@ class TorchModelMixin:
         train_loss_current, train_metric = 0, 0
 
         for x, y in dataloader:
-            clear_torch_cache(self.device)
             x, y = x.to(self.device), y.to(self.device)
 
             # compute error
@@ -358,7 +360,6 @@ class TorchModelMixin:
         test_loss, test_metric, test_num_batches = 0, 0, len(dataloader)
         with torch.no_grad():  # with no gradient
             for x, y in dataloader:
-                clear_torch_cache(self.device)
                 x, y = x.to(self.device), y.to(self.device)
                 pred = model(x)
                 test_loss += loss_fn(y, pred).item()  # scalar

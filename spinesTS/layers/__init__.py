@@ -12,4 +12,4 @@ from ._enhance_layers import (
     FFTTopKBlock
 )
 from ._multi_features import SeriesRecombinationLayer
-from ._position_encoder import PositionalEncoding
+from ._position_encoder import PositionalEncoding, LearnablePositionalEncoding
