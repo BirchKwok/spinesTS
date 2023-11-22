@@ -32,11 +32,17 @@ class EncoderDecoderBlock(nn.Module):
 
     def forward(self, x):
         if x.ndim == 2:
-            x = torch.unsqueeze(x, dim=1)
+            x = x.view(x.size(0), 1, x.size(1))
+        elif x.ndim == 1:
+            x = x.view(1, 1, x.size(0))
 
         _, (h, _) = self.encoder(x)
         x = self.position_encoder(x)
+
         x = x.squeeze() + h.squeeze()
+
+        if x.ndim == 1:
+            x = x.view(1, -1)
 
         return self.decoder(x.view(x.size(0), -1))
 
@@ -66,11 +72,9 @@ class Seq2SeqBlock(nn.Module):
             nn.Linear(256, out_features)
         )
 
-        self.batch_norm = nn.BatchNorm1d(in_features)
-
     def forward(self, x):
         if x.ndim == 2:
-            x = x.unsqueeze(1)
+            x = x.view(x.size(0), 1, x.size(1))
 
         output = self.enc_dnc(x)
 
