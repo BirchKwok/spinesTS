@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from spinesTS.base import TorchModelMixin, ForecastingMixin
-from spinesTS.layers import PositionalEncoding
+from spinesTS.layers import LearnablePositionalEncoding
 
 
 class EncoderDecoderBlock(nn.Module):
@@ -12,7 +12,8 @@ class EncoderDecoderBlock(nn.Module):
             self,
             in_features,
             out_features,
-            bias=False
+            bias=False,
+            dropout=0.1
     ):
         super(EncoderDecoderBlock, self).__init__()
 
@@ -20,65 +21,71 @@ class EncoderDecoderBlock(nn.Module):
                                bias=bias,
                                bidirectional=False, batch_first=True)
 
-        self.decoder_output = nn.Linear(in_features, in_features)
+        self.decoder = nn.Sequential(
+            nn.BatchNorm1d(in_features),
+            nn.Linear(in_features, out_features),
+            nn.GELU(),
+            nn.Dropout(dropout)
+        )
 
-        self.position_encoder = PositionalEncoding(in_features)
-
-        self.linear = nn.Linear(in_features, out_features)
-        self.gelu = nn.GELU()
+        self.position_encoder = LearnablePositionalEncoding(in_features)
 
     def forward(self, x):
         if x.ndim == 2:
             x = torch.unsqueeze(x, dim=1)
 
         _, (h, _) = self.encoder(x)
-
         x = self.position_encoder(x)
         x = x.squeeze() + h.squeeze()
 
-        output = self.decoder_output(x.squeeze())
-
-        output = self.gelu(self.linear(output.squeeze()))
-
-        return output
+        return self.decoder(x.view(x.size(0), -1))
 
 
 class Seq2SeqBlock(nn.Module):
-    def __init__(self, in_features, out_features, bias=False):
+    def __init__(self, in_features, out_features, bias=False, dropout=0.1, blocks=2):
         super(Seq2SeqBlock, self).__init__()
 
         self.in_features, self.out_features = in_features, out_features
 
-        self.forward_block = EncoderDecoderBlock(
-            in_features=in_features,
-            out_features=in_features,
-            bias=bias
+        self.enc_dnc = nn.Sequential(
+            *nn.ModuleList([
+                EncoderDecoderBlock(
+                    in_features=in_features,
+                    out_features=in_features,
+                    bias=bias,
+                    dropout=dropout
+                ) for _ in range(blocks)]
+            )
         )
 
-        self.linear_0 = nn.Linear(in_features, 256)
-        self.gelu = nn.GELU()
-        self.linear_1 = nn.Linear(256, out_features)
+        self.position_encoder = LearnablePositionalEncoding(in_features)
 
-        self.position_encoder1 = PositionalEncoding(in_features, add_x=False)
+        self.output_layer = nn.Sequential(
+            nn.Linear(in_features, 256),
+            nn.GELU(),
+            nn.Linear(256, out_features)
+        )
+
+        self.batch_norm = nn.BatchNorm1d(in_features)
 
     def forward(self, x):
-        forward_output = self.forward_block(x)
+        if x.ndim == 2:
+            x = x.unsqueeze(1)
 
-        if forward_output.ndim == 1:
-            forward_output = forward_output.unsqueeze(0)
+        output = self.enc_dnc(x)
 
-        output = forward_output + self.position_encoder1(forward_output).squeeze().mean(dim=1)
+        # 残差连接
+        output = self.position_encoder(output.unsqueeze(1)).squeeze() + x.squeeze()
 
-        output = self.linear_0(output.squeeze())
-        output = self.gelu(output)
-
-        return self.linear_1(output)
+        return self.output_layer(output.squeeze())
 
 
 class StackingRNN(TorchModelMixin, ForecastingMixin):
     def __init__(self,
                  in_features: int,
                  out_features: int,
+                 dropout=0.1,
+                 blocks=2,
                  loss_fn='mae',
                  bias=False,
                  learning_rate: float = 0.001,
@@ -88,14 +95,16 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
         super(StackingRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call(bias=bias)
+        self.model, self.loss_fn, self.optimizer = self.call(bias=bias, dropout=dropout, blocks=blocks)
         self.loss_fn_name = loss_fn
 
-    def call(self, bias) -> tuple:
+    def call(self, bias, dropout, blocks) -> tuple:
         model = Seq2SeqBlock(
             in_features=self.in_features,
             out_features=self.out_features,
-            bias=bias
+            bias=bias,
+            dropout=dropout,
+            blocks=blocks
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)

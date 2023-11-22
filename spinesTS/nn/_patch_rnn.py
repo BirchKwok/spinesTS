@@ -76,10 +76,11 @@ class PatchRNNBlock(nn.Module):
 class PatchRNN(TorchModelMixin, ForecastingMixin):
     """长序列预测模型
     """
-
     def __init__(self,
                  in_features: int,
                  out_features: int,
+                 kernel_size=4,
+                 dropout=0.1,
                  loss_fn='mae',
                  learning_rate: float = 0.001,
                  random_seed: int = 42,
@@ -88,14 +89,16 @@ class PatchRNN(TorchModelMixin, ForecastingMixin):
         super(PatchRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call()
+        self.model, self.loss_fn, self.optimizer = self.call(kernel_size, dropout)
         self.loss_fn_name = loss_fn
 
-    def call(self) -> tuple:
+    def call(self, kernel_size, dropout) -> tuple:
         model = PatchRNNBlock(
             in_features=self.in_features,
             out_features=self.out_features,
-            device=self.device
+            device=self.device,
+            kernel_size=kernel_size,
+            dropout=dropout
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)

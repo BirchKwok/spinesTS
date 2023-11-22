@@ -10,7 +10,7 @@ class PositionalEncoding(nn.Module):
         # Compute the positional encodings once in log space.
         self.add_x = add_x
         pe = torch.zeros(max_len, d_model).float()
-        pe.require_grad = False
+        pe.requires_grad = False
 
         position = torch.arange(0, max_len).float().unsqueeze(1)
         div_term = (torch.arange(0, d_model, 2).float()
