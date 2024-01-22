@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Union, Any
+from typing import Union
 
 import pandas as pd
 import numpy as np

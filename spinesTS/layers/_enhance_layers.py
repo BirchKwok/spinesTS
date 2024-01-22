@@ -1,7 +1,6 @@
 import torch
-from torch import nn, topk, fft
+from torch import nn, fft
 from torch.nn import functional as F
-import numpy as np
 
 
 class GaussianNoise1d(nn.Module):

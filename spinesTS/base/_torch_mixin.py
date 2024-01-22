@@ -8,13 +8,13 @@ from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 
 from spinesUtils.asserts import ParameterValuesAssert, augmented_isinstance, ParameterTypeAssert
-from spinesUtils.utils import Logger
+from spinesUtils.logging import Logger
 
 from spinesTS.metrics import WMAPELoss, RMSELoss
 from spinesTS.utils import seed_everything, check_is_fitted
 
 
-logger = Logger(with_time=False)
+logger = Logger(with_time=False, name='')
 
 
 @ParameterTypeAssert({
@@ -240,7 +240,7 @@ class TorchModelMixin:
 
         """
         if verbose:
-            logger.print(self.string_format)
+            logger.info('Information about the device used for computation:\n'+self.string_format)
             time.sleep(0.5)
 
         return self._fit(

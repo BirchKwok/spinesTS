@@ -8,7 +8,8 @@ from sklearn.multioutput import _MultiOutputEstimator, _fit_estimator
 from sklearn.utils.validation import _check_fit_params
 
 from spinesTS.base import ForecastingMixin
-from spinesTS.utils import func_has_params, check_is_fitted
+from spinesTS.utils import check_is_fitted
+from spinesUtils.asserts import check_has_param
 
 warnings.filterwarnings('ignore')
 
@@ -47,7 +48,7 @@ class MultiStepRegressor(ForecastingMixin):
             assert np.ndim(y) <= 2
             _ = y[:, 0]
 
-        if func_has_params(self._estimator.fit, "eval_set") and eval_set is not None:
+        if check_has_param(self._estimator.fit, "eval_set") and eval_set is not None:
 
             try:
                 eval_sets_ = (eval_set[0], eval_set[1][:, 0])
@@ -137,7 +138,7 @@ class MultiOutputRegressor(ForecastingMixin, _MultiOutputEstimator):
 
         fit_params_validated = _check_fit_params(X, fit_params)
 
-        if func_has_params(self.estimator.fit, "eval_set") and eval_set is not None:
+        if check_has_param(self.estimator.fit, "eval_set") and eval_set is not None:
             try:
                 eval_sets_ = [(eval_set[0], eval_set[1][:, i]) for i in range(y.shape[1])]
                 self.estimators_ = Parallel(n_jobs=self.n_jobs)(
