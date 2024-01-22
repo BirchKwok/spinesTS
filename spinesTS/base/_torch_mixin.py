@@ -177,6 +177,7 @@ class TorchModelMixin:
         self.loss_fn_name = loss_fn
         self.loss_fn = get_loss_func(loss_fn)
         self.current_patience = 0
+        self.model, self.loss_fn, self.optimizer = self.call()
 
         self.__spinesTS_is_fitted__ = False
 
@@ -435,7 +436,7 @@ class TorchModelMixin:
 
         return scheduler
 
-    def print_training_log(self, init_lr, metrics_name, total_epochs):
+    def _print_training_log(self, init_lr, metrics_name, total_epochs):
         training_log_print = OrderedDict({
             "epoch_msg": "",
             "current_p_msg": "",
@@ -454,16 +455,22 @@ class TorchModelMixin:
         training_log_print["loss_msg"] = f"loss: {self.training_logs['train_loss'][-1]:>.4f} - " + \
                                          f"{metrics_name}: {self.training_logs['train_accuracy'][-1]:>.4f}"
 
-        training_log_print[
-            "val_loss_msg"
-        ] = f"val_loss: {self.training_logs['test_loss'][-1]:>.4f} - " + \
-            f"val_{metrics_name}: {self.training_logs['test_accuracy'][-1]:>.4f}"
+        if len(self.training_logs['test_loss']) == 0:
+            del training_log_print['val_loss_msg']
+        else:
+            training_log_print[
+                "val_loss_msg"
+            ] = f"val_loss: {self.training_logs['test_loss'][-1]:>.4f} - " + \
+                f"val_{metrics_name}: {self.training_logs['test_accuracy'][-1]:>.4f}"
 
         training_log_print["time_msg"] = \
             f"{self.training_logs['time_cost'][-1]:>.2f}s/epoch - " + \
             f"{self.training_logs['time_cost'][-1] / self.training_logs['batches'][-1]:>.3f}s/step"
 
-        training_log_print["current_p_msg"] = f"p{self.training_logs['current_p'][-1]}"
+        if len(self.training_logs['current_p']) == 0:
+            del training_log_print['current_p_msg']
+        else:
+            training_log_print["current_p_msg"] = f"p{self.training_logs['current_p'][-1]}"
 
         if round(self.training_logs['lrs'][-1], 5) == init_lr:
             del training_log_print['lr_msg']
@@ -575,7 +582,7 @@ class TorchModelMixin:
             self.training_logs['time_cost'].append(tok - tik)
 
             if verbose:
-                print(self.print_training_log(init_lr, metrics_name, epochs))
+                print(self._print_training_log(init_lr, metrics_name, epochs))
 
             if stop_state:
                 if verbose:
