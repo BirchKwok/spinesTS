@@ -56,36 +56,33 @@ class Time2Vec(nn.Module):
 
 
 class GAU(nn.Module):
-    def __init__(
-            self,
-            in_features,
-            query_key_dim=256,
-            expansion_factor=3.,
-            skip_connect=True,
-            dropout=0.,
-    ):
+    def __init__(self, in_features, query_key_dim=256, expansion_factor=3., skip_connect=True, dropout=0.):
         super(GAU, self).__init__()
         hidden_dim = int(expansion_factor) * in_features
+        self.query_key_dim = query_key_dim
 
         self.norm = nn.LayerNorm(in_features)
         self.dropout = nn.Dropout(dropout)
 
+        # Memory unit
+        self.memory = nn.Linear(in_features, in_features)
+
+        # Bilinear attention mechanism
+        self.W_bilinear = nn.Parameter(torch.randn(query_key_dim, query_key_dim))
+
         self.to_hidden = nn.Sequential(
             nn.Linear(in_features, hidden_dim * 2),
-            nn.SiLU()
+            nn.ReLU()
         )
 
         self.to_qk = nn.Sequential(
             nn.Linear(in_features, query_key_dim),
-            nn.SiLU()
+            nn.ReLU()
         )
-
-        self.gamma = nn.Parameter(torch.ones(2, query_key_dim))
-        self.beta = nn.Parameter(torch.zeros(2, query_key_dim))
-        nn.init.normal_(self.gamma, std=0.02)
 
         self.to_out = nn.Sequential(
             nn.Linear(hidden_dim, in_features),
+            nn.LayerNorm(in_features),
             nn.Dropout(dropout)
         )
 
@@ -94,27 +91,22 @@ class GAU(nn.Module):
     def forward(self, x):
         seq_len = x.shape[-2]
 
-        normed_x = self.norm(x)  # (bs,seq_len,dim)
-        v, gate = self.to_hidden(normed_x).chunk(2, dim=-1)  # (bs,seq_len,seq_len)
+        # Update memory
+        memory = self.memory(x)
 
-        Z = self.to_qk(normed_x)  # (bs,seq_len,query_key_dim)
+        normed_x = self.norm(x + memory)
+        v, gate = self.to_hidden(normed_x).chunk(2, dim=-1)
 
-        QK = torch.einsum('... d, h d -> ... h d', Z, self.gamma) + self.beta
-        q, k = QK.unbind(dim=-2)
+        Z = self.to_qk(normed_x)
 
-        if x.ndim == 2:
-            sim = torch.einsum('i d, j d -> i j', q, k) / seq_len
-        else:
-            sim = torch.einsum('b i d, b j d -> b i j', q, k) / seq_len
+        # Bilinear attention
+        QK = torch.einsum('b i d, d e, b j e -> b i j', Z, self.W_bilinear, Z)
+        QK /= seq_len
 
-        A = F.relu(sim) ** 2
+        A = F.relu(QK) ** 2
         A = self.dropout(A)
 
-        if x.ndim == 2:
-            V = torch.einsum('i j, j d -> i d', A, v)
-        else:
-            V = torch.einsum('b i j, b j d -> b i d', A, v)
-
+        V = torch.einsum('b i j, b j d -> b i d', A, v)
         V = V * gate
 
         out = self.to_out(V)

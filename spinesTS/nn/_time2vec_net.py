@@ -33,14 +33,15 @@ class T2V(nn.Module):
 class Time2VecNet(TorchModelMixin, ForecastingMixin):
     def __init__(self, in_features, out_features, learning_rate=0.001,
                  random_seed=42, device='auto', loss_fn='mae'):
-        super(Time2VecNet, self).__init__(random_seed, device=device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call(device=device)
+        self.device = device
         self.loss_fn_name = loss_fn
+        # this sentence needs to be the last one
+        super(Time2VecNet, self).__init__(random_seed, device=device, loss_fn=loss_fn)
 
-    def call(self, device):
-        model = T2V(self.in_features, self.out_features, device=device)
+    def call(self):
+        model = T2V(self.in_features, self.out_features, device=self.device)
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer

@@ -62,16 +62,17 @@ class GAUNet(TorchModelMixin, ForecastingMixin):
                  device='auto',
                  loss_fn='mae'
                  ) -> None:
-        super(GAUNet, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.loss_fn_name = loss_fn
-        self.model, self.loss_fn, self.optimizer = self.call(level)
+        self.level = level
 
-    def call(self,
-             level: int = 2) -> tuple:
+        # this sentence needs to be the last one
+        super(GAUNet, self).__init__(random_seed, device, loss_fn=loss_fn)
+
+    def call(self) -> tuple:
         model = GAUBase(self.in_features, self.out_features,
-                        level=level)
+                        level=self.level)
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer

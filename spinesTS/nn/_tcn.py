@@ -84,16 +84,18 @@ class TCN(TorchModelMixin, ForecastingMixin):
                  device='auto',
                  loss_fn='mae'
                  ) -> None:
-        super(TCN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
         self.loss_fn_name = loss_fn
-        self.model, self.loss_fn, self.optimizer = self.call(kernel_size=kernel_size, dropout=dropout, device=device)
+        self.kernel_size = kernel_size
+        self.dropout = dropout
+        self.device = device
+        # this sentence needs to be the last one
+        super(TCN, self).__init__(random_seed, device, loss_fn=loss_fn)
 
-    def call(self,
-             kernel_size: int = 2, dropout: float = 0.2, device='auto') -> tuple:
-        model = TemporalConvNet(self.in_features, self.out_features, kernel_size=kernel_size, dropout=dropout,
-                                device=device)
+    def call(self) -> tuple:
+        model = TemporalConvNet(self.in_features, self.out_features, kernel_size=self.kernel_size,
+                                dropout=self.dropout, device=self.device)
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
         return model, loss_fn, optimizer

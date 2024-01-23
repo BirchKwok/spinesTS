@@ -86,19 +86,22 @@ class PatchRNN(TorchModelMixin, ForecastingMixin):
                  random_seed: int = 42,
                  device='auto'
                  ) -> None:
-        super(PatchRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call(kernel_size, dropout)
+        self.kernel_size = kernel_size
+        self.dropout = dropout
         self.loss_fn_name = loss_fn
 
-    def call(self, kernel_size, dropout) -> tuple:
+        # this sentence needs to be the last one
+        super(PatchRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
+
+    def call(self) -> tuple:
         model = PatchRNNBlock(
             in_features=self.in_features,
             out_features=self.out_features,
             device=self.device,
-            kernel_size=kernel_size,
-            dropout=dropout
+            kernel_size=self.kernel_size,
+            dropout=self.dropout
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)

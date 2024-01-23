@@ -96,19 +96,23 @@ class StackingRNN(TorchModelMixin, ForecastingMixin):
                  random_seed: int = 42,
                  device='auto'
                  ) -> None:
-        super(StackingRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
         self.in_features, self.out_features = in_features, out_features
         self.learning_rate = learning_rate
-        self.model, self.loss_fn, self.optimizer = self.call(bias=bias, dropout=dropout, blocks=blocks)
+        self.dropout = dropout
+        self.blocks = blocks
+        self.bias = bias
         self.loss_fn_name = loss_fn
 
-    def call(self, bias, dropout, blocks) -> tuple:
+        # this sentence needs to be the last one
+        super(StackingRNN, self).__init__(random_seed, device, loss_fn=loss_fn)
+
+    def call(self) -> tuple:
         model = Seq2SeqBlock(
             in_features=self.in_features,
             out_features=self.out_features,
-            bias=bias,
-            dropout=dropout,
-            blocks=blocks
+            bias=self.bias,
+            dropout=self.dropout,
+            blocks=self.blocks
         )
         loss_fn = self.loss_fn
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate)
