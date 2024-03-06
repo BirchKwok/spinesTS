@@ -1,6 +1,13 @@
 # spinesTS 
 ## Time Series forecasting toolsets
 
+[![PyPI version](https://badge.fury.io/py/spinesTS.svg)](https://badge.fury.io/py/spinesTS)
+[![Downloads](https://pepy.tech/badge/spinesTS)](https://pepy.tech/project/spinesTS)
+[![Downloads](https://pepy.tech/badge/spinesTS/month)](https://pepy.tech/project/spinesTS)
+[![Downloads](https://pepy.tech/badge/spinesTS/week)](https://pepy.tech/project/spinesTS)
+
+**Note**: This repository has now been included in the [PipelineTS](https://github.com/BirchKwok/PipelineTS) library, hence this repository has been archived. Please use [PipelineTS](https://github.com/BirchKwok/PipelineTS) to access the latest features and technical support.
+
 - [Install](https://github.com/BirchKwok/spinesTS#install)
 - [spinesTS Modules](https://github.com/BirchKwok/spinesTS#spinests-modules)
 - [Tutorials](https://github.com/BirchKwok/spinesTS#tutorials)
